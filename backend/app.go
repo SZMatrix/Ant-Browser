@@ -41,6 +41,7 @@ type App struct {
 	xrayMgr        *proxy.XrayManager
 	clashMgr       *proxy.ClashManager
 	singboxMgr     *proxy.SingBoxManager
+	socks5Mgr      *proxy.Socks5BridgeManager
 	launchCodeSvc  *launchcode.LaunchCodeService
 	launchServer   *launchcode.LaunchServer
 	speedScheduler *browser.ProxySpeedScheduler
@@ -52,6 +53,7 @@ type App struct {
 	maintenanceMu    sync.Mutex // 维护类操作（初始化/导入/导出）互斥锁
 	bridgeMu         sync.Mutex
 	xrayBridgeRefs   map[string]string
+	socks5BridgeRefs map[string]string
 	stopServicesOnce sync.Once
 	finalizeOnce     sync.Once
 }
@@ -63,9 +65,10 @@ func NewApp(appRoot string, appVersion ...string) *App {
 		version = strings.TrimSpace(appVersion[0])
 	}
 	return &App{
-		appRoot:        strings.TrimSpace(appRoot),
-		version:        version,
-		xrayBridgeRefs: make(map[string]string),
+		appRoot:          strings.TrimSpace(appRoot),
+		version:          version,
+		xrayBridgeRefs:   make(map[string]string),
+		socks5BridgeRefs: make(map[string]string),
 	}
 }
 
@@ -163,6 +166,7 @@ func (a *App) startup(ctx context.Context) {
 	a.xrayMgr = proxy.NewXrayManager(cfg, a.appRoot)
 	a.clashMgr = proxy.NewClashManager(cfg, a.appRoot)
 	a.singboxMgr = proxy.NewSingBoxManager(cfg, a.appRoot)
+	a.socks5Mgr = proxy.NewSocks5BridgeManager()
 
 	// 注入 DAO（必须在 InitData 之前）
 	conn := db.GetConn()
@@ -219,6 +223,15 @@ func (a *App) startup(ctx context.Context) {
 		if a.ctx != nil {
 			runtime.EventsEmit(a.ctx, "proxy:bridge:died", map[string]interface{}{
 				"engine": "singbox",
+				"key":    key[:8],
+				"error":  err.Error(),
+			})
+		}
+	}
+	a.socks5Mgr.OnBridgeDied = func(key string, err error) {
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "proxy:bridge:died", map[string]interface{}{
+				"engine": "socks5",
 				"key":    key[:8],
 				"error":  err.Error(),
 			})
@@ -391,6 +404,40 @@ func (a *App) releaseProfileXrayBridge(profileId string) {
 func (a *App) clearProfileXrayBridges() {
 	a.bridgeMu.Lock()
 	a.xrayBridgeRefs = make(map[string]string)
+	a.bridgeMu.Unlock()
+}
+
+func (a *App) bindProfileSocks5Bridge(profileId string, bridgeKey string) {
+	profileId = strings.TrimSpace(profileId)
+	bridgeKey = strings.TrimSpace(bridgeKey)
+	if profileId == "" || bridgeKey == "" {
+		return
+	}
+
+	a.bridgeMu.Lock()
+	a.socks5BridgeRefs[profileId] = bridgeKey
+	a.bridgeMu.Unlock()
+}
+
+func (a *App) releaseProfileSocks5Bridge(profileId string) {
+	profileId = strings.TrimSpace(profileId)
+	if profileId == "" {
+		return
+	}
+
+	a.bridgeMu.Lock()
+	bridgeKey := a.socks5BridgeRefs[profileId]
+	delete(a.socks5BridgeRefs, profileId)
+	a.bridgeMu.Unlock()
+
+	if bridgeKey != "" && a.socks5Mgr != nil {
+		a.socks5Mgr.ReleaseBridge(bridgeKey)
+	}
+}
+
+func (a *App) clearProfileSocks5Bridges() {
+	a.bridgeMu.Lock()
+	a.socks5BridgeRefs = make(map[string]string)
 	a.bridgeMu.Unlock()
 }
 
@@ -700,15 +747,126 @@ func (a *App) TestProxyRealConnectivity(proxyId string) ProxyTestResult {
 	return ProxyTestResult{ProxyId: r.ProxyId, Ok: r.Ok, LatencyMs: r.LatencyMs, Error: r.Error}
 }
 
+// probeID 是纯工具函数使用的内部哨兵，不对外暴露
+const probeID = "__probe__"
+
+// lookupProxyConfig 从已保存代理列表按 proxyId 查找 ProxyConfig
+func (a *App) lookupProxyConfig(proxyId string) string {
+	for _, p := range a.getLatestProxies() {
+		if strings.EqualFold(p.ProxyId, proxyId) {
+			return p.ProxyConfig
+		}
+	}
+	return ""
+}
+
+// proxyListFor 将单个 proxyConfig 包装为供底层查找使用的单元素列表
+func proxyListFor(proxyConfig string) []config.BrowserProxy {
+	return []config.BrowserProxy{{ProxyId: probeID, ProxyConfig: proxyConfig}}
+}
+
+// ── 纯工具：只接受 proxyConfig，不涉及任何业务逻辑 ──────────────────────────
+
+// ProxyTestSpeed 对指定代理配置进行测速，不写入数据库。
+func (a *App) ProxyTestSpeed(proxyConfig string) ProxyTestResult {
+	proxyConfig = strings.TrimSpace(proxyConfig)
+	if proxyConfig == "" {
+		return ProxyTestResult{Ok: false, Error: "代理配置为空"}
+	}
+	r := proxy.SpeedTest(probeID, proxyListFor(proxyConfig), a.xrayMgr, a.singboxMgr, nil)
+	return ProxyTestResult{Ok: r.Ok, LatencyMs: r.LatencyMs, Error: r.Error}
+}
+
+// ProxyBatchTestSpeed 对一组代理配置批量并发测速，结果顺序与输入一致，不写入数据库。
+func (a *App) ProxyBatchTestSpeed(proxyConfigs []string, concurrency int) []ProxyTestResult {
+	if len(proxyConfigs) == 0 {
+		return []ProxyTestResult{}
+	}
+	if concurrency <= 0 {
+		concurrency = 20
+	}
+	if concurrency > len(proxyConfigs) {
+		concurrency = len(proxyConfigs)
+	}
+	results := make([]ProxyTestResult, len(proxyConfigs))
+	type job struct {
+		Idx    int
+		Config string
+	}
+	jobs := make(chan job, len(proxyConfigs))
+	var wg sync.WaitGroup
+	for w := 0; w < concurrency; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				results[j.Idx] = a.ProxyTestSpeed(j.Config)
+			}
+		}()
+	}
+	for i, cfg := range proxyConfigs {
+		jobs <- job{Idx: i, Config: cfg}
+	}
+	close(jobs)
+	wg.Wait()
+	return results
+}
+
+// ProxyCheckIPHealth 对指定代理配置进行 IP 健康检测，不写入数据库。
+func (a *App) ProxyCheckIPHealth(proxyConfig string) ProxyIPHealthResult {
+	proxyConfig = strings.TrimSpace(proxyConfig)
+	if proxyConfig == "" {
+		return buildProxyIPHealthResult("", nil, fmt.Errorf("代理配置为空"))
+	}
+	data, err := proxy.FetchIPPureInfo(probeID, proxyListFor(proxyConfig), a.xrayMgr, a.singboxMgr)
+	return buildProxyIPHealthResult("", data, err)
+}
+
+// ProxyBatchCheckIPHealth 对一组代理配置批量并发 IP 健康检测，结果顺序与输入一致，不写入数据库。
+func (a *App) ProxyBatchCheckIPHealth(proxyConfigs []string, concurrency int) []ProxyIPHealthResult {
+	if len(proxyConfigs) == 0 {
+		return []ProxyIPHealthResult{}
+	}
+	if concurrency <= 0 {
+		concurrency = 10
+	}
+	if concurrency > len(proxyConfigs) {
+		concurrency = len(proxyConfigs)
+	}
+	results := make([]ProxyIPHealthResult, len(proxyConfigs))
+	type job struct {
+		Idx    int
+		Config string
+	}
+	jobs := make(chan job, len(proxyConfigs))
+	var wg sync.WaitGroup
+	for w := 0; w < concurrency; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				results[j.Idx] = a.ProxyCheckIPHealth(j.Config)
+			}
+		}()
+	}
+	for i, cfg := range proxyConfigs {
+		jobs <- job{Idx: i, Config: cfg}
+	}
+	close(jobs)
+	wg.Wait()
+	return results
+}
+
+// ── 业务层：按 proxyId 操作，调用纯工具后处理持久化和事件推送 ───────────────
+
 // BrowserProxyTestSpeed 手动触发单个代理测速并持久化结果
 func (a *App) BrowserProxyTestSpeed(proxyId string) ProxyTestResult {
-	proxies := a.getLatestProxies()
-	r := proxy.SpeedTest(proxyId, proxies, a.xrayMgr, a.singboxMgr, nil)
+	result := a.ProxyTestSpeed(a.lookupProxyConfig(proxyId))
+	result.ProxyId = proxyId
 	if a.browserMgr.ProxyDAO != nil {
-		testedAt := time.Now().Format(time.RFC3339)
-		_ = a.browserMgr.ProxyDAO.UpdateSpeedResult(proxyId, r.Ok, r.LatencyMs, testedAt)
+		_ = a.browserMgr.ProxyDAO.UpdateSpeedResult(proxyId, result.Ok, result.LatencyMs, time.Now().Format(time.RFC3339))
 	}
-	return ProxyTestResult{ProxyId: r.ProxyId, Ok: r.Ok, LatencyMs: r.LatencyMs, Error: r.Error}
+	return result
 }
 
 // BrowserProxyBatchTestSpeed 批量并发测速，concurrency 控制并发数（默认 20）
@@ -722,51 +880,38 @@ func (a *App) BrowserProxyBatchTestSpeed(proxyIds []string, concurrency int) []P
 	if concurrency > len(proxyIds) {
 		concurrency = len(proxyIds)
 	}
-	proxies := a.getLatestProxies()
 	results := make([]ProxyTestResult, len(proxyIds))
-	type speedJob struct {
+	type job struct {
 		Idx     int
 		ProxyId string
 	}
-	jobs := make(chan speedJob, len(proxyIds))
+	jobs := make(chan job, len(proxyIds))
 	var wg sync.WaitGroup
-
-	// 固定大小 worker 池，避免大量代理时创建过多 goroutine
-	for worker := 0; worker < concurrency; worker++ {
+	for w := 0; w < concurrency; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for job := range jobs {
-				r := proxy.SpeedTest(job.ProxyId, proxies, a.xrayMgr, a.singboxMgr, nil)
-				if a.browserMgr.ProxyDAO != nil {
-					testedAt := time.Now().Format(time.RFC3339)
-					_ = a.browserMgr.ProxyDAO.UpdateSpeedResult(job.ProxyId, r.Ok, r.LatencyMs, testedAt)
-				}
-				result := ProxyTestResult{ProxyId: r.ProxyId, Ok: r.Ok, LatencyMs: r.LatencyMs, Error: r.Error}
-				results[job.Idx] = result
-
-				// 实时推送单个结果到前端
+			for j := range jobs {
+				result := a.BrowserProxyTestSpeed(j.ProxyId)
+				results[j.Idx] = result
 				if a.ctx != nil {
 					runtime.EventsEmit(a.ctx, "proxy:speed:result", result)
 				}
 			}
 		}()
 	}
-
 	for i, pid := range proxyIds {
-		jobs <- speedJob{Idx: i, ProxyId: pid}
+		jobs <- job{Idx: i, ProxyId: pid}
 	}
 	close(jobs)
-
 	wg.Wait()
 	return results
 }
 
 // BrowserProxyCheckIPHealth 检测单个代理的出口 IP 健康信息（通过 IPPure 接口）
 func (a *App) BrowserProxyCheckIPHealth(proxyId string) ProxyIPHealthResult {
-	proxies := a.getLatestProxies()
-	data, err := proxy.FetchIPPureInfo(proxyId, proxies, a.xrayMgr, a.singboxMgr)
-	result := buildProxyIPHealthResult(proxyId, data, err)
+	result := a.ProxyCheckIPHealth(a.lookupProxyConfig(proxyId))
+	result.ProxyId = proxyId
 	a.persistProxyIPHealthResult(result)
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, "proxy:iphealth:result", result)
@@ -785,37 +930,27 @@ func (a *App) BrowserProxyBatchCheckIPHealth(proxyIds []string, concurrency int)
 	if concurrency > len(proxyIds) {
 		concurrency = len(proxyIds)
 	}
-
-	proxies := a.getLatestProxies()
 	results := make([]ProxyIPHealthResult, len(proxyIds))
-	type healthJob struct {
+	type job struct {
 		Idx     int
 		ProxyId string
 	}
-	jobs := make(chan healthJob, len(proxyIds))
+	jobs := make(chan job, len(proxyIds))
 	var wg sync.WaitGroup
-
-	for worker := 0; worker < concurrency; worker++ {
+	for w := 0; w < concurrency; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for job := range jobs {
-				data, err := proxy.FetchIPPureInfo(job.ProxyId, proxies, a.xrayMgr, a.singboxMgr)
-				result := buildProxyIPHealthResult(job.ProxyId, data, err)
-				a.persistProxyIPHealthResult(result)
-				results[job.Idx] = result
-				if a.ctx != nil {
-					runtime.EventsEmit(a.ctx, "proxy:iphealth:result", result)
-				}
+			for j := range jobs {
+				result := a.BrowserProxyCheckIPHealth(j.ProxyId)
+				results[j.Idx] = result
 			}
 		}()
 	}
-
 	for i, pid := range proxyIds {
-		jobs <- healthJob{Idx: i, ProxyId: pid}
+		jobs <- job{Idx: i, ProxyId: pid}
 	}
 	close(jobs)
-
 	wg.Wait()
 	return results
 }
@@ -1010,24 +1145,6 @@ func (a *App) SaveBrowserProxies(proxies []BrowserProxy) error {
 		})
 	}
 
-	// 确保内置代理始终存在（直连 + 本地代理）
-	builtins := []BrowserProxy{
-		{ProxyId: "__direct__", ProxyName: "直连（不走代理）", ProxyConfig: "direct://"},
-		{ProxyId: "__local__", ProxyName: "本地代理", ProxyConfig: "http://127.0.0.1:7890"},
-	}
-	for _, b := range builtins {
-		found := false
-		for _, p := range normalized {
-			if p.ProxyId == b.ProxyId {
-				found = true
-				break
-			}
-		}
-		if !found {
-			normalized = append([]BrowserProxy{b}, normalized...)
-		}
-	}
-
 	a.config.Browser.Proxies = normalized
 
 	// 优先写入 SQLite
@@ -1206,12 +1323,7 @@ func (a *App) migrateToSQLite() {
 		} else if len(a.config.Browser.Proxies) > 0 {
 			srcProxies = a.config.Browser.Proxies
 		} else {
-			// 初始化默认代理
-			srcProxies = []browser.Proxy{
-				{ProxyId: "__direct__", ProxyName: "直连（不走代理）", ProxyConfig: "direct://"},
-				{ProxyId: "__local__", ProxyName: "本地代理", ProxyConfig: "http://127.0.0.1:7890"},
-			}
-			log.Info("代理表为空，初始化默认代理")
+			log.Info("代理表为空，跳过初始化")
 		}
 		for _, p := range srcProxies {
 			if err := a.browserMgr.ProxyDAO.Upsert(p); err != nil {

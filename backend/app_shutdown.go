@@ -25,6 +25,11 @@ func (a *App) stopRuntimeServices() {
 		}
 		a.clearProfileXrayBridges()
 
+		if a.socks5Mgr != nil {
+			a.socks5Mgr.StopAll()
+		}
+		a.clearProfileSocks5Bridges()
+
 		if a.singboxMgr != nil {
 			a.singboxMgr.StopAll()
 		}

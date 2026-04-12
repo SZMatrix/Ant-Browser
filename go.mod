@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/leanovate/gopter v0.2.11
 	github.com/metacubex/mihomo v1.19.20
-	github.com/wailsapp/wails/v2 v2.11.0
+	github.com/wailsapp/wails/v2 v2.12.0
 	golang.org/x/net v0.35.0
 	golang.org/x/sys v0.30.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -17,6 +17,7 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
+	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/RyuaNerin/go-krypto v1.3.0 // indirect
 	github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344 // indirect
 	github.com/andybalholm/brotli v1.0.6 // indirect

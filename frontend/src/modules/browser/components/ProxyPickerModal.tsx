@@ -85,9 +85,6 @@ export function ProxyPickerModal({ open, currentProxyId, onSelect, onClose }: Pr
       if (result?.ok && result.latencyMs >= 0) {
         return [0, result.latencyMs, proxy.proxyName || '']
       }
-      if (proxy.proxyConfig === 'direct://') {
-        return [2, Number.MAX_SAFE_INTEGER, proxy.proxyName || '']
-      }
       if (result && !result.ok) {
         return [3, Number.MAX_SAFE_INTEGER, proxy.proxyName || '']
       }

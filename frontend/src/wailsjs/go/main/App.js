@@ -294,6 +294,22 @@ export function OpenUserDataDir(arg1) {
   return window['go']['main']['App']['OpenUserDataDir'](arg1);
 }
 
+export function ProxyBatchCheckIPHealth(arg1, arg2) {
+  return window['go']['main']['App']['ProxyBatchCheckIPHealth'](arg1, arg2);
+}
+
+export function ProxyBatchTestSpeed(arg1, arg2) {
+  return window['go']['main']['App']['ProxyBatchTestSpeed'](arg1, arg2);
+}
+
+export function ProxyCheckIPHealth(arg1) {
+  return window['go']['main']['App']['ProxyCheckIPHealth'](arg1);
+}
+
+export function ProxyTestSpeed(arg1) {
+  return window['go']['main']['App']['ProxyTestSpeed'](arg1);
+}
+
 export function QuitAppOnly() {
   return window['go']['main']['App']['QuitAppOnly']();
 }

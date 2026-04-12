@@ -1,0 +1,45 @@
+sync:
+  defaults:
+    ignore:
+      paths:
+        - "**/.git"
+        - ".vscode"
+        - ".idea"
+        - ".history"
+        - ".kiro"
+        - ".windsurfrules"
+        - "docs"
+        - "images/readme"
+        - "bin"
+        - "build/bin"
+        - "build/dist"
+        - "chrome"
+        - "data"
+        - "snapshots"
+        - "frontend/node_modules"
+        - "frontend/dist"
+        - "frontend/.vite"
+        - ".tmp/runtime-cache"
+        - "coverage"
+        - "tmp-debug-port*"
+        - "tmp-frontend-limited-watcher.pid"
+        - "*.log"
+        - "*.err"
+        - "*.db"
+        - "*.sqlite"
+        - "*.sqlite3"
+        - "app.db"
+        - "config.yaml.broken-*"
+        - "proxies.yaml"
+        - "profiles.yaml"
+        - ".env"
+        - ".env.*"
+        - "mutagen.yml"
+        - "mutagen.yml.lock"
+
+  Ant-Browser-Sync:
+    alpha: "./"
+
+    # 远端同步到对应的 Hexo 项目目录
+    beta: "vibecoding-server:workspace/wys/Ant-Browser"
+    mode: "two-way-resolved"

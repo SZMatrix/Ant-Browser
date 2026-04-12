@@ -107,9 +107,14 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 	proxies := a.getLatestProxies()
 	acquiredXrayBridgeKey := ""
 	releaseXrayBridge := false
+	acquiredSocks5BridgeKey := ""
+	releaseSocks5Bridge := false
 	defer func() {
 		if releaseXrayBridge && acquiredXrayBridgeKey != "" && a.xrayMgr != nil {
 			a.xrayMgr.ReleaseBridge(acquiredXrayBridgeKey)
+		}
+		if releaseSocks5Bridge && acquiredSocks5BridgeKey != "" && a.socks5Mgr != nil {
+			a.socks5Mgr.ReleaseBridge(acquiredSocks5BridgeKey)
 		}
 	}()
 
@@ -137,7 +142,29 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		return profile, startErr
 	}
 
-	if proxy.IsSingBoxProtocol(resolvedProxyConfig) {
+	if proxy.NeedsSocks5AuthBridge(resolvedProxyConfig, proxies, profile.ProxyId) {
+		// socks5://user:pass@host:port → 本地无认证 socks5 桥接
+		// Chrome 的 --proxy-server 不支持内联 SOCKS5 用户名密码认证，
+		// 必须通过本地中转代为完成上游认证。
+		socksURL, bridgeKey, bridgeErr := a.socks5Mgr.AcquireBridge(resolvedProxyConfig, proxies, profile.ProxyId)
+		if bridgeErr != nil {
+			startErr := fmt.Errorf("实例启动失败：代理桥接启动失败（socks5-auth）。原因：%v。请检查代理地址与本地端口占用。", bridgeErr)
+			log.Error("代理桥接失败(socks5-auth)", logger.F("error", bridgeErr.Error()), logger.F("reason", startErr.Error()))
+			profile.LastError = startErr.Error()
+			if a.ctx != nil {
+				runtime.EventsEmit(a.ctx, "proxy:bridge:failed", map[string]interface{}{
+					"profileId":   profileId,
+					"profileName": profile.ProfileName,
+					"error":       startErr.Error(),
+				})
+			}
+			return profile, startErr
+		}
+		acquiredSocks5BridgeKey = bridgeKey
+		releaseSocks5Bridge = bridgeKey != ""
+		effectiveProxy = socksURL
+		log.Info("socks5 桥接成功", logger.F("socks_url", socksURL))
+	} else if proxy.IsSingBoxProtocol(resolvedProxyConfig) {
 		// hysteria2 / tuic → sing-box 桥接
 		socksURL, bridgeErr := a.singboxMgr.EnsureBridge(resolvedProxyConfig, proxies, profile.ProxyId)
 		if bridgeErr != nil {
@@ -249,6 +276,10 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 				a.bindProfileXrayBridge(profileId, acquiredXrayBridgeKey)
 				releaseXrayBridge = false
 			}
+			if acquiredSocks5BridgeKey != "" {
+				a.bindProfileSocks5Bridge(profileId, acquiredSocks5BridgeKey)
+				releaseSocks5Bridge = false
+			}
 
 			log.Info("实例启动",
 				logger.F("profile_id", profileId),
@@ -300,6 +331,10 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		if acquiredXrayBridgeKey != "" {
 			a.bindProfileXrayBridge(profileId, acquiredXrayBridgeKey)
 			releaseXrayBridge = false
+		}
+		if acquiredSocks5BridgeKey != "" {
+			a.bindProfileSocks5Bridge(profileId, acquiredSocks5BridgeKey)
+			releaseSocks5Bridge = false
 		}
 
 		log.Warn("浏览器窗口已启动，但调试接口在等待窗口内未就绪，转入后台附着",
@@ -712,6 +747,7 @@ func (a *App) markProfileStoppedLocked(profileId string, profile *BrowserProfile
 	profile.LastStopAt = time.Now().Format(time.RFC3339)
 	delete(a.browserMgr.BrowserProcesses, profileId)
 	a.releaseProfileXrayBridge(profileId)
+	a.releaseProfileSocks5Bridge(profileId)
 	if a.launchServer != nil {
 		a.launchServer.ClearActiveProfile(profileId)
 	}

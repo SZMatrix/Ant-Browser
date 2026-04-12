@@ -153,6 +153,14 @@ export function OpenCorePath(arg1:string):Promise<void>;
 
 export function OpenUserDataDir(arg1:string):Promise<void>;
 
+export function ProxyBatchCheckIPHealth(arg1:Array<string>,arg2:number):Promise<Array<backend.ProxyIPHealthResult>>;
+
+export function ProxyBatchTestSpeed(arg1:Array<string>,arg2:number):Promise<Array<backend.ProxyTestResult>>;
+
+export function ProxyCheckIPHealth(arg1:string):Promise<backend.ProxyIPHealthResult>;
+
+export function ProxyTestSpeed(arg1:string):Promise<backend.ProxyTestResult>;
+
 export function QuitAppOnly():Promise<void>;
 
 export function RedeemCDKey(arg1:string):Promise<void>;

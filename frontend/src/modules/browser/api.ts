@@ -405,6 +405,24 @@ export async function browserProxyTestSpeed(proxyId: string): Promise<{ proxyId:
   return { proxyId, ok: true, latencyMs: Math.floor(100 + Math.random() * 400), error: '' }
 }
 
+export async function proxyTestSpeed(proxyConfig: string): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }> {
+  const bindings: any = await getBindings()
+  if (bindings?.ProxyTestSpeed) {
+    return (await bindings.ProxyTestSpeed(proxyConfig)) || { proxyId: '', ok: false, latencyMs: 0, error: '调用失败' }
+  }
+  await new Promise(r => setTimeout(r, 300 + Math.random() * 500))
+  return { proxyId: '', ok: true, latencyMs: Math.floor(100 + Math.random() * 400), error: '' }
+}
+
+export async function proxyBatchTestSpeed(proxyConfigs: string[], concurrency = 20): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }[]> {
+  const bindings: any = await getBindings()
+  if (bindings?.ProxyBatchTestSpeed) {
+    return (await bindings.ProxyBatchTestSpeed(proxyConfigs, concurrency)) || []
+  }
+  await new Promise(r => setTimeout(r, 1000))
+  return proxyConfigs.map(() => ({ proxyId: '', ok: true, latencyMs: Math.floor(100 + Math.random() * 400), error: '' }))
+}
+
 export async function browserProxyBatchTestSpeed(proxyIds: string[], concurrency: number = 20): Promise<{ proxyId: string; ok: boolean; latencyMs: number; error: string }[]> {
   const bindings: any = await getBindings()
   if (bindings?.BrowserProxyBatchTestSpeed) {
@@ -452,6 +470,69 @@ export async function browserProxyCheckIPHealth(proxyId: string): Promise<ProxyI
     rawData: {},
     updatedAt: new Date().toISOString(),
   }
+}
+
+export async function proxyCheckIPHealth(proxyConfig: string): Promise<ProxyIPHealthResult> {
+  const bindings: any = await getBindings()
+  if (bindings?.ProxyCheckIPHealth) {
+    return (await bindings.ProxyCheckIPHealth(proxyConfig)) || {
+      proxyId: '',
+      ok: false,
+      source: 'ippure',
+      error: '调用失败',
+      ip: '',
+      fraudScore: 0,
+      isResidential: false,
+      isBroadcast: false,
+      country: '',
+      region: '',
+      city: '',
+      asOrganization: '',
+      rawData: {},
+      updatedAt: new Date().toISOString(),
+    }
+  }
+  await new Promise(r => setTimeout(r, 600))
+  return {
+    proxyId: '',
+    ok: true,
+    source: 'ippure',
+    error: '',
+    ip: '127.0.0.1',
+    fraudScore: Math.floor(Math.random() * 100),
+    isResidential: Math.random() > 0.5,
+    isBroadcast: false,
+    country: 'Mock',
+    region: 'Mock',
+    city: 'Mock',
+    asOrganization: 'Mock ISP',
+    rawData: {},
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+export async function proxyBatchCheckIPHealth(proxyConfigs: string[], concurrency = 10): Promise<ProxyIPHealthResult[]> {
+  const bindings: any = await getBindings()
+  if (bindings?.ProxyBatchCheckIPHealth) {
+    return (await bindings.ProxyBatchCheckIPHealth(proxyConfigs, concurrency)) || []
+  }
+  await new Promise(r => setTimeout(r, 1000))
+  return proxyConfigs.map(() => ({
+    proxyId: '',
+    ok: true,
+    source: 'ippure',
+    error: '',
+    ip: '127.0.0.1',
+    fraudScore: Math.floor(Math.random() * 100),
+    isResidential: Math.random() > 0.5,
+    isBroadcast: false,
+    country: 'Mock',
+    region: 'Mock',
+    city: 'Mock',
+    asOrganization: 'Mock ISP',
+    rawData: {},
+    updatedAt: new Date().toISOString(),
+  }))
 }
 
 export async function browserProxyBatchCheckIPHealth(proxyIds: string[], concurrency: number = 10): Promise<ProxyIPHealthResult[]> {

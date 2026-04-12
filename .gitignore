@@ -90,3 +90,5 @@ tmp-debug-port*/
 .env
 .env.*
 !.env.example
+/mutagen.config.yml
+mutagen.yml.lock
