@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Switch, Table, Textarea, toast } from '../../../shared/components'
 import type { SortOrder, TableColumn } from '../../../shared/components/Table'
 import type { BrowserProxy, ProxyIPHealthResult } from '../types'
-import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, browserProxyTestSpeed, browserProxyBatchTestSpeed, browserProxyCheckIPHealth, browserProxyBatchCheckIPHealth, fetchClashImportFromURL } from '../api'
+import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, browserProxyTestSpeed, browserProxyBatchTestSpeed, browserProxyCheckIPHealth, browserProxyBatchCheckIPHealth, fetchClashImportFromURL, proxyTestSpeed, proxyCheckIPHealth } from '../api'
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import yaml from 'js-yaml'
 
@@ -705,6 +705,10 @@ export function ProxyPoolPage() {
   const [importNamePrefix, setImportNamePrefix] = useState('')
   const [importGroupName, setImportGroupName] = useState('')
   const [directImportForm, setDirectImportForm] = useState<DirectImportForm>(() => ({ ...INITIAL_DIRECT_IMPORT_FORM }))
+  const [directTestSpeedResult, setDirectTestSpeedResult] = useState<{ ok: boolean; latencyMs: number; error: string } | null>(null)
+  const [directTestSpeedLoading, setDirectTestSpeedLoading] = useState(false)
+  const [directHealthResult, setDirectHealthResult] = useState<{ ok: boolean; ip: string; country: string; fraudScore: number; isResidential: boolean; error: string } | null>(null)
+  const [directHealthLoading, setDirectHealthLoading] = useState(false)
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [previewList, setPreviewList] = useState<ProxyDisplayInfo[]>([])
   const [removedPreviewProxyNames, setRemovedPreviewProxyNames] = useState<string[]>([])
@@ -1398,6 +1402,60 @@ export function ProxyPoolPage() {
       setImportUrl('')
       setImportDnsServers('')
     }
+    setDirectTestSpeedResult(null)
+    setDirectHealthResult(null)
+  }
+
+  const buildDirectProxyConfig = (): string | null => {
+    try {
+      const candidate = buildDirectImportCandidate(directImportForm)
+      return candidate.proxyConfig
+    } catch {
+      return null
+    }
+  }
+
+  const handleDirectTestSpeed = async () => {
+    const config = buildDirectProxyConfig()
+    if (!config) {
+      toast.error('请先填写完整的代理地址和端口')
+      return
+    }
+    setDirectTestSpeedLoading(true)
+    setDirectTestSpeedResult(null)
+    try {
+      const result = await proxyTestSpeed(config)
+      setDirectTestSpeedResult({ ok: result.ok, latencyMs: result.latencyMs, error: result.error })
+    } catch (error: any) {
+      setDirectTestSpeedResult({ ok: false, latencyMs: 0, error: error?.message || '测速失败' })
+    } finally {
+      setDirectTestSpeedLoading(false)
+    }
+  }
+
+  const handleDirectHealthCheck = async () => {
+    const config = buildDirectProxyConfig()
+    if (!config) {
+      toast.error('请先填写完整的代理地址和端口')
+      return
+    }
+    setDirectHealthLoading(true)
+    setDirectHealthResult(null)
+    try {
+      const result = await proxyCheckIPHealth(config)
+      setDirectHealthResult({
+        ok: result.ok,
+        ip: result.ip || '',
+        country: result.country || '',
+        fraudScore: result.fraudScore || 0,
+        isResidential: result.isResidential || false,
+        error: result.error || '',
+      })
+    } catch (error: any) {
+      setDirectHealthResult({ ok: false, ip: '', country: '', fraudScore: 0, isResidential: false, error: error?.message || '检测失败' })
+    } finally {
+      setDirectHealthLoading(false)
+    }
   }
 
   const handleFetchImportURL = async () => {
@@ -1501,6 +1559,8 @@ export function ProxyPoolPage() {
       setImportNamePrefix('')
       setImportGroupName('')
       setDirectImportForm({ ...INITIAL_DIRECT_IMPORT_FORM })
+      setDirectTestSpeedResult(null)
+      setDirectHealthResult(null)
       setPreviewList([])
       setRemovedPreviewProxyNames([])
       toast.success(`成功导入 ${newProxies.length} 个代理`)
@@ -1685,7 +1745,7 @@ export function ProxyPoolPage() {
               />
             </>
           )}
-          {importMode === 'direct' && (
+          {importMode === 'direct' && (<>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormItem label="代理协议" required>
                 <Select
@@ -1734,7 +1794,52 @@ export function ProxyPoolPage() {
                 />
               </FormItem>
             </div>
-          )}
+            <div className="space-y-2 mt-1">
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleDirectTestSpeed}
+                  loading={directTestSpeedLoading}
+                  disabled={!directImportForm.server.trim() || !directImportForm.port.trim()}
+                >
+                  测速
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleDirectHealthCheck}
+                  loading={directHealthLoading}
+                  disabled={!directImportForm.server.trim() || !directImportForm.port.trim()}
+                >
+                  IP 健康检测
+                </Button>
+              </div>
+              {directTestSpeedResult && (
+                <div className={`text-sm px-3 py-2 rounded ${directTestSpeedResult.ok ? 'bg-[var(--color-bg-secondary)] text-[var(--color-success)]' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
+                  {directTestSpeedResult.ok
+                    ? `连接成功，延迟：${directTestSpeedResult.latencyMs} ms`
+                    : `连接失败：${directTestSpeedResult.error}`}
+                </div>
+              )}
+              {directHealthResult && (
+                <div className={`text-sm px-3 py-2 rounded ${directHealthResult.ok ? 'bg-[var(--color-bg-secondary)]' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
+                  {directHealthResult.ok ? (
+                    <div className="space-y-0.5">
+                      <div>出口 IP：<span className="font-mono">{directHealthResult.ip}</span></div>
+                      <div>
+                        国家/地区：{directHealthResult.country || '-'}
+                        {' | '}欺诈分：<span className={directHealthResult.fraudScore > 60 ? 'text-red-500' : directHealthResult.fraudScore > 30 ? 'text-yellow-500' : 'text-[var(--color-success)]'}>{directHealthResult.fraudScore}</span>
+                        {' | '}{directHealthResult.isResidential ? '住宅 IP' : '数据中心 IP'}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>检测失败：{directHealthResult.error}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>)}
           <FormItem label="分组名称（可选）">
             <Input
               value={importGroupName}

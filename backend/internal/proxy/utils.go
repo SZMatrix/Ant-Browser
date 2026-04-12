@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -285,12 +284,11 @@ func TestRealConnectivityWithSingBox(
 		transport := &http.Transport{DialContext: contextDialer.DialContext}
 		client = &http.Client{Transport: transport, Timeout: timeout}
 	} else {
-		// DirectProxy：http/https/socks5 直接代理
-		proxyURL, err := url.Parse(src)
+		// DirectProxy：http/https 直接代理
+		transport, err := HTTPProxyTransport(src)
 		if err != nil {
-			return TestResult{ProxyId: proxyId, Ok: false, Error: fmt.Sprintf("代理地址解析失败: %v", err)}
+			return TestResult{ProxyId: proxyId, Ok: false, Error: err.Error()}
 		}
-		transport := &http.Transport{Proxy: http.ProxyURL(proxyURL)}
 		client = &http.Client{Transport: transport, Timeout: timeout}
 	}
 

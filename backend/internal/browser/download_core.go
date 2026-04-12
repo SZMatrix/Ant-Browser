@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"ant-chrome/backend/internal/logger"
+	"ant-chrome/backend/internal/proxy"
 	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -81,8 +81,8 @@ func (m *Manager) DownloadAndExtractCore(ctx context.Context, coreName string, t
 		// http.ProxyFromEnvironment 只读环境变量，而 Clash 的全局代理写在 Windows 注册表里
 		// 必须直接读取注册表才能拿到正确的代理地址
 		if sysProxy, rErr := readSystemProxy(); rErr == nil && sysProxy != "" {
-			if proxyURL, pErr := url.Parse(sysProxy); pErr == nil {
-				transport.Proxy = http.ProxyURL(proxyURL)
+			if t, pErr := proxy.HTTPProxyTransport(sysProxy); pErr == nil {
+				transport.Proxy = t.Proxy
 				sendEvent("downloading", 0, "已从系统注册表读取代理: "+sysProxy)
 			} else {
 				// 解析失败则回退到环境变量
@@ -94,8 +94,8 @@ func (m *Manager) DownloadAndExtractCore(ctx context.Context, coreName string, t
 			sendEvent("downloading", 0, "系统注册表无代理配置，使用环境变量兜底")
 		}
 	} else if proxyConfig != "" && proxyConfig != "direct://" && proxyConfig != "__direct__" {
-		if proxyURL, pErr := url.Parse(proxyConfig); pErr == nil {
-			transport.Proxy = http.ProxyURL(proxyURL)
+		if t, pErr := proxy.HTTPProxyTransport(proxyConfig); pErr == nil {
+			transport.Proxy = t.Proxy
 		} else {
 			sendEvent("error", 0, "代理地址解析失败: "+pErr.Error())
 			return

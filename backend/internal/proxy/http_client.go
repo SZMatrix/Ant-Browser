@@ -73,12 +73,26 @@ func buildProxyHTTPClient(
 		return &http.Client{Transport: transport, Timeout: timeout}, nil
 	}
 
-	proxyURL, err := url.Parse(src)
+	transport, err := HTTPProxyTransport(src)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Client{Transport: transport, Timeout: timeout}, nil
+}
+
+// httpProxyTransport 解析代理地址并返回 http.Transport。
+// HTTP 代理即使代理 HTTPS 流量，代理连接本身也是明文 HTTP（通过 CONNECT 隧道）。
+// 如果 scheme 为 https，Go 会尝试与代理服务器做 TLS 握手，导致握手失败，
+// 因此统一将 https scheme 转为 http。
+func HTTPProxyTransport(raw string) (*http.Transport, error) {
+	proxyURL, err := url.Parse(raw)
 	if err != nil {
 		return nil, fmt.Errorf("代理地址解析失败: %w", err)
 	}
-	transport := &http.Transport{Proxy: http.ProxyURL(proxyURL)}
-	return &http.Client{Transport: transport, Timeout: timeout}, nil
+	if proxyURL.Scheme == "https" {
+		proxyURL.Scheme = "http"
+	}
+	return &http.Transport{Proxy: http.ProxyURL(proxyURL)}, nil
 }
 
 func buildSocks5HTTPClient(socks5Host string, timeout time.Duration) (*http.Client, error) {
