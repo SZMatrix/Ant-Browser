@@ -51,9 +51,21 @@ export function Input({ error, className, ...props }: InputProps) {
   )
 }
 
+interface SelectOption {
+  value: string
+  label: string
+  divider?: never
+}
+
+interface SelectDivider {
+  divider: true
+  value?: never
+  label?: string
+}
+
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   error?: boolean
-  options: { value: string; label: string }[]
+  options: (SelectOption | SelectDivider)[]
 }
 
 export function Select({ error, options, className, ...props }: SelectProps) {
@@ -74,11 +86,17 @@ export function Select({ error, options, className, ...props }: SelectProps) {
       )}
       {...props}
     >
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
+      {options.map((opt, i) =>
+        'divider' in opt && opt.divider ? (
+          <option key={`__divider_${i}`} disabled value="">
+            {'──────────'}
+          </option>
+        ) : (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        )
+      )}
     </select>
   )
 }

@@ -3,11 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { FolderOpen, Layers } from 'lucide-react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Textarea, toast } from '../../../shared/components'
 import type { BrowserCore, BrowserProfileInput, BrowserProxy, BrowserGroup } from '../types'
-import { createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, openUserDataDir, updateBrowserProfile } from '../api'
+import { createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, openUserDataDir, updateBrowserProfile, proxyTestSpeed, proxyCheckIPHealth } from '../api'
 import { FingerprintPanel } from '../components/FingerprintPanel'
 import { TagInput } from '../components/TagInput'
 import { GroupSelector } from '../components/GroupSelector'
 import { ProxyPickerModal } from '../components/ProxyPickerModal'
+import { DirectProxyEditor } from '../components/DirectProxyEditor'
+import type { DirectImportForm, DirectTestSpeedResult, DirectHealthResult } from '../components/DirectProxyEditor'
+import { buildDirectProxyConfig, parseDirectProxyConfig } from '../utils/directProxy'
 
 const fallbackLowLaunchArgs = ['--disable-sync', '--no-first-run']
 
@@ -46,6 +49,18 @@ export function BrowserEditPage() {
   const [isDirty, setIsDirty] = useState(false)
   const [leaveConfirm, setLeaveConfirm] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [directForm, setDirectForm] = useState<DirectImportForm>({
+    proxyName: '',
+    protocol: 'http',
+    server: '',
+    port: '',
+    username: '',
+    password: '',
+  })
+  const [directTestSpeedResult, setDirectTestSpeedResult] = useState<DirectTestSpeedResult | null>(null)
+  const [directTestSpeedLoading, setDirectTestSpeedLoading] = useState(false)
+  const [directHealthResult, setDirectHealthResult] = useState<DirectHealthResult | null>(null)
+  const [directHealthLoading, setDirectHealthLoading] = useState(false)
 
   useEffect(() => {
     const loadData = async () => {
@@ -86,6 +101,21 @@ export function BrowserEditPage() {
         groupId: current.groupId || '',
       })
       setLaunchArgsText(currentLaunchArgs.join('\n'))
+      // Detect custom proxy: proxyId empty but proxyConfig present
+      if (!current.proxyId && current.proxyConfig) {
+        const parsed = parseDirectProxyConfig(current.proxyConfig)
+        if (parsed.ok) {
+          setDirectForm(prev => ({
+            ...prev,
+            protocol: parsed.form.protocol,
+            server: parsed.form.server,
+            port: parsed.form.port,
+            username: parsed.form.username,
+            password: parsed.form.password,
+          }))
+        }
+        setFormData(prev => ({ ...prev, proxyId: '__custom__' }))
+      }
     }
     loadData()
   }, [id, isCreate])
@@ -97,8 +127,30 @@ export function BrowserEditPage() {
 
   const handleSave = async () => {
     setSaving(true)
+    let proxyConfig = formData.proxyConfig
+    let proxyId = formData.proxyId
+    if (formData.proxyId === '__custom__') {
+      try {
+        proxyConfig = buildDirectProxyConfig({
+          protocol: directForm.protocol,
+          server: directForm.server,
+          port: directForm.port,
+          username: directForm.username,
+          password: directForm.password,
+        })
+      } catch (e: any) {
+        setSaveError(e?.message || '自定义代理配置无效')
+        setSaving(false)
+        return
+      }
+      proxyId = ''
+    } else if (proxyId) {
+      proxyConfig = ''
+    }
     const payload: BrowserProfileInput = {
       ...formData,
+      proxyId,
+      proxyConfig,
       launchArgs: normalizeLaunchArgs(launchArgsText.split('\n')),
     }
     try {
@@ -133,6 +185,56 @@ export function BrowserEditPage() {
       await openUserDataDir(formData.userDataDir)
     } catch (error: unknown) {
       toast.error((error as Error)?.message || '打开目录失败')
+    }
+  }
+
+  const handleDirectTestSpeed = async () => {
+    let proxyConfig: string
+    try {
+      proxyConfig = buildDirectProxyConfig({
+        protocol: directForm.protocol,
+        server: directForm.server,
+        port: directForm.port,
+        username: directForm.username,
+        password: directForm.password,
+      })
+    } catch (e: any) {
+      toast.error(e?.message || '代理配置无效')
+      return
+    }
+    setDirectTestSpeedLoading(true)
+    try {
+      const result = await proxyTestSpeed(proxyConfig)
+      setDirectTestSpeedResult(result)
+    } catch (e: any) {
+      setDirectTestSpeedResult({ ok: false, latencyMs: 0, error: e?.message || '测速失败' })
+    } finally {
+      setDirectTestSpeedLoading(false)
+    }
+  }
+
+  const handleDirectHealthCheck = async () => {
+    let proxyConfig: string
+    try {
+      proxyConfig = buildDirectProxyConfig({
+        protocol: directForm.protocol,
+        server: directForm.server,
+        port: directForm.port,
+        username: directForm.username,
+        password: directForm.password,
+      })
+    } catch (e: any) {
+      toast.error(e?.message || '代理配置无效')
+      return
+    }
+    setDirectHealthLoading(true)
+    try {
+      const raw = await proxyCheckIPHealth(proxyConfig)
+      setDirectHealthResult({ ok: raw.ok, ip: raw.ip, country: raw.country, fraudScore: raw.fraudScore, isResidential: raw.isResidential, error: raw.error })
+    } catch (e: any) {
+      setDirectHealthResult({ ok: false, ip: '', country: '', fraudScore: 0, isResidential: false, error: e?.message || '检测失败' })
+    } finally {
+      setDirectHealthLoading(false)
     }
   }
 
@@ -201,7 +303,7 @@ export function BrowserEditPage() {
         </div>
       </Card>
 
-      <Card title="代理配置" subtitle="选择代理池中的代理或手动输入">
+      <Card title="代理配置" subtitle="选择代理池中的代理或自定义配置">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="代理池选择">
             <div className="flex gap-2">
@@ -210,26 +312,35 @@ export function BrowserEditPage() {
                 onChange={e => handleChange('proxyId', e.target.value)}
                 options={[
                   { value: '', label: '不使用代理池' },
+                  { value: '__custom__', label: '自定义' },
+                  { divider: true as const },
                   ...proxies.map(p => ({ value: p.proxyId, label: p.proxyName || p.proxyId })),
                 ]}
                 className="flex-1"
               />
-              <Button variant="secondary" size="sm" onClick={() => setProxyPickerOpen(true)} title="按分组选择代理">
-                <Layers className="w-4 h-4" />
-              </Button>
+              {formData.proxyId !== '__custom__' && (
+                <Button variant="secondary" size="sm" onClick={() => setProxyPickerOpen(true)} title="按分组选择代理">
+                  <Layers className="w-4 h-4" />
+                </Button>
+              )}
             </div>
           </FormItem>
-          <FormItem label="手动代理配置">
-            <Input
-              value={formData.proxyConfig}
-              onChange={e => handleChange('proxyConfig', e.target.value)}
-              placeholder="http://127.0.0.1:7890"
-              disabled={!!formData.proxyId}
-            />
-          </FormItem>
         </div>
-        {formData.proxyId && (
-          <p className="text-xs text-[var(--color-text-muted)] mt-2">已选择代理池代理，手动配置将被忽略</p>
+        {formData.proxyId === '__custom__' && (
+          <>
+            <hr className="my-4 border-[var(--color-border)]" />
+            <DirectProxyEditor
+              form={directForm}
+              onFormChange={setDirectForm}
+              testSpeedResult={directTestSpeedResult}
+              testSpeedLoading={directTestSpeedLoading}
+              healthResult={directHealthResult}
+              healthLoading={directHealthLoading}
+              onTestSpeed={handleDirectTestSpeed}
+              onHealthCheck={handleDirectHealthCheck}
+              showProxyName={false}
+            />
+          </>
         )}
       </Card>
 

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Switch, Table, Textarea, toast } from '../../../shared/components'
+import { Button, Card, ConfirmModal, FormItem, Input, Modal, Switch, Table, Textarea, toast } from '../../../shared/components'
 import type { SortOrder, TableColumn } from '../../../shared/components/Table'
 import type { BrowserProxy, ProxyIPHealthResult } from '../types'
 import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies, browserProxyTestSpeed, browserProxyBatchTestSpeed, browserProxyCheckIPHealth, browserProxyBatchCheckIPHealth, fetchClashImportFromURL, proxyTestSpeed, proxyCheckIPHealth } from '../api'
 import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import yaml from 'js-yaml'
+import { ClashImportTab } from '../components/ClashImportTab'
+import { DirectProxyEditor } from '../components/DirectProxyEditor'
 
 const PROXY_LATENCY_CACHE_KEY = 'browser:proxyPool:latencyMap:v1'
 const PROXY_IP_HEALTH_CACHE_KEY = 'browser:proxyPool:ipHealthMap:v1'
@@ -33,12 +35,6 @@ interface DirectImportForm {
   username: string
   password: string
 }
-
-const DIRECT_PROXY_PROTOCOL_OPTIONS = [
-  { value: 'http', label: 'HTTP' },
-  { value: 'https', label: 'HTTPS' },
-  { value: 'socks5', label: 'SOCKS5' },
-] as const
 
 const INITIAL_DIRECT_IMPORT_FORM: DirectImportForm = {
   proxyName: '',
@@ -1706,140 +1702,33 @@ export function ProxyPoolPage() {
               : '支持单条录入 HTTP / HTTPS / SOCKS5 代理，账号和密码均可留空，导入后直接生效，不走 Clash 桥接'}
           </p>
           {importMode === 'clash' && (
-            <>
-              <FormItem label="订阅 URL（可选）">
-                <div className="flex gap-2">
-                  <Input
-                    value={importUrl}
-                    onChange={e => {
-                      const next = e.target.value
-                      setImportUrl(next)
-                      if (importResolvedUrl.trim() && next.trim() !== importResolvedUrl.trim()) {
-                        setImportResolvedUrl('')
-                      }
-                    }}
-                    placeholder="https://example.com/clash/subscription"
-                    className="flex-1"
-                  />
-                  <Button
-                    variant="secondary"
-                    onClick={handleFetchImportURL}
-                    loading={fetchingImportUrl}
-                    disabled={!importUrl.trim()}
-                  >
-                    从 URL 获取
-                  </Button>
-                </div>
-                {importResolvedUrl.trim() && (
-                  <p className="text-xs text-[var(--color-success)] mt-1 break-all">
-                    已绑定订阅：{importResolvedUrl}
-                  </p>
-                )}
-                <p className="text-xs text-[var(--color-text-muted)] mt-1">获取成功后会自动回填 YAML 文本，并尝试自动填充 DNS 与建议分组；自动刷新时间请在列表顶部统一配置</p>
-              </FormItem>
-              <Textarea
-                value={importText}
-                onChange={e => setImportText(e.target.value)}
-                rows={12}
-                placeholder={`proxies:\n  - name: vless-v6\n    type: vless\n    server: example.com\n    port: 443\n    uuid: your-uuid\n    ...`}
-              />
-            </>
+            <ClashImportTab
+              importUrl={importUrl}
+              importResolvedUrl={importResolvedUrl}
+              importText={importText}
+              fetchingImportUrl={fetchingImportUrl}
+              onUrlChange={next => {
+                setImportUrl(next)
+                if (importResolvedUrl.trim() && next.trim() !== importResolvedUrl.trim()) {
+                  setImportResolvedUrl('')
+                }
+              }}
+              onTextChange={setImportText}
+              onFetchUrl={handleFetchImportURL}
+            />
           )}
-          {importMode === 'direct' && (<>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <FormItem label="代理协议" required>
-                <Select
-                  options={[...DIRECT_PROXY_PROTOCOL_OPTIONS]}
-                  value={directImportForm.protocol}
-                  onChange={e => setDirectImportForm(prev => ({ ...prev, protocol: e.target.value as DirectImportForm['protocol'] }))}
-                />
-              </FormItem>
-              <FormItem label="代理名称（可选）">
-                <Input
-                  value={directImportForm.proxyName}
-                  onChange={e => setDirectImportForm(prev => ({ ...prev, proxyName: e.target.value }))}
-                  placeholder="例如：香港节点"
-                />
-              </FormItem>
-              <FormItem label="代理地址" required>
-                <Input
-                  value={directImportForm.server}
-                  onChange={e => setDirectImportForm(prev => ({ ...prev, server: e.target.value }))}
-                  placeholder="例如：127.0.0.1 或 hk.example.com"
-                />
-              </FormItem>
-              <FormItem label="代理端口" required>
-                <Input
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={directImportForm.port}
-                  onChange={e => setDirectImportForm(prev => ({ ...prev, port: e.target.value }))}
-                  placeholder="例如：1080"
-                />
-              </FormItem>
-              <FormItem label="账号（可选）">
-                <Input
-                  value={directImportForm.username}
-                  onChange={e => setDirectImportForm(prev => ({ ...prev, username: e.target.value }))}
-                  placeholder="留空则不使用认证"
-                />
-              </FormItem>
-              <FormItem label="密码（可选）">
-                <Input
-                  type="password"
-                  value={directImportForm.password}
-                  onChange={e => setDirectImportForm(prev => ({ ...prev, password: e.target.value }))}
-                  placeholder="留空则不使用密码"
-                />
-              </FormItem>
-            </div>
-            <div className="space-y-2 mt-1">
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={handleDirectTestSpeed}
-                  loading={directTestSpeedLoading}
-                  disabled={!directImportForm.server.trim() || !directImportForm.port.trim()}
-                >
-                  测速
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={handleDirectHealthCheck}
-                  loading={directHealthLoading}
-                  disabled={!directImportForm.server.trim() || !directImportForm.port.trim()}
-                >
-                  IP 健康检测
-                </Button>
-              </div>
-              {directTestSpeedResult && (
-                <div className={`text-sm px-3 py-2 rounded ${directTestSpeedResult.ok ? 'bg-[var(--color-bg-secondary)] text-[var(--color-success)]' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
-                  {directTestSpeedResult.ok
-                    ? `连接成功，延迟：${directTestSpeedResult.latencyMs} ms`
-                    : `连接失败：${directTestSpeedResult.error}`}
-                </div>
-              )}
-              {directHealthResult && (
-                <div className={`text-sm px-3 py-2 rounded ${directHealthResult.ok ? 'bg-[var(--color-bg-secondary)]' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
-                  {directHealthResult.ok ? (
-                    <div className="space-y-0.5">
-                      <div>出口 IP：<span className="font-mono">{directHealthResult.ip}</span></div>
-                      <div>
-                        国家/地区：{directHealthResult.country || '-'}
-                        {' | '}欺诈分：<span className={directHealthResult.fraudScore > 60 ? 'text-red-500' : directHealthResult.fraudScore > 30 ? 'text-yellow-500' : 'text-[var(--color-success)]'}>{directHealthResult.fraudScore}</span>
-                        {' | '}{directHealthResult.isResidential ? '住宅 IP' : '数据中心 IP'}
-                      </div>
-                    </div>
-                  ) : (
-                    <div>检测失败：{directHealthResult.error}</div>
-                  )}
-                </div>
-              )}
-            </div>
-          </>)}
+          {importMode === 'direct' && (
+            <DirectProxyEditor
+              form={directImportForm}
+              onFormChange={setDirectImportForm}
+              testSpeedResult={directTestSpeedResult}
+              testSpeedLoading={directTestSpeedLoading}
+              healthResult={directHealthResult}
+              healthLoading={directHealthLoading}
+              onTestSpeed={handleDirectTestSpeed}
+              onHealthCheck={handleDirectHealthCheck}
+            />
+          )}
           <FormItem label="分组名称（可选）">
             <Input
               value={importGroupName}

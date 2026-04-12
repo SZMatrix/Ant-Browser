@@ -412,10 +412,10 @@ func (a *App) backupStopRuntimeForMaintenance() {
 		a.xrayMgr.StopAll()
 	}
 	a.clearProfileXrayBridges()
-	if a.socks5Mgr != nil {
-		a.socks5Mgr.StopAll()
+	if a.authBridgeMgr != nil {
+		a.authBridgeMgr.StopAll()
 	}
-	a.clearProfileSocks5Bridges()
+	a.clearProfileAuthBridges()
 	if a.singboxMgr != nil {
 		a.singboxMgr.StopAll()
 	}

@@ -41,7 +41,7 @@ type App struct {
 	xrayMgr        *proxy.XrayManager
 	clashMgr       *proxy.ClashManager
 	singboxMgr     *proxy.SingBoxManager
-	socks5Mgr      *proxy.Socks5BridgeManager
+	authBridgeMgr  *proxy.AuthBridgeManager
 	launchCodeSvc  *launchcode.LaunchCodeService
 	launchServer   *launchcode.LaunchServer
 	speedScheduler *browser.ProxySpeedScheduler
@@ -52,8 +52,8 @@ type App struct {
 	quitMode         quitMode   // 退出模式：全量退出 / 仅退出应用
 	maintenanceMu    sync.Mutex // 维护类操作（初始化/导入/导出）互斥锁
 	bridgeMu         sync.Mutex
-	xrayBridgeRefs   map[string]string
-	socks5BridgeRefs map[string]string
+	xrayBridgeRefs  map[string]string
+	authBridgeRefs  map[string]string
 	stopServicesOnce sync.Once
 	finalizeOnce     sync.Once
 }
@@ -67,8 +67,8 @@ func NewApp(appRoot string, appVersion ...string) *App {
 	return &App{
 		appRoot:          strings.TrimSpace(appRoot),
 		version:          version,
-		xrayBridgeRefs:   make(map[string]string),
-		socks5BridgeRefs: make(map[string]string),
+		xrayBridgeRefs: make(map[string]string),
+		authBridgeRefs: make(map[string]string),
 	}
 }
 
@@ -166,7 +166,7 @@ func (a *App) startup(ctx context.Context) {
 	a.xrayMgr = proxy.NewXrayManager(cfg, a.appRoot)
 	a.clashMgr = proxy.NewClashManager(cfg, a.appRoot)
 	a.singboxMgr = proxy.NewSingBoxManager(cfg, a.appRoot)
-	a.socks5Mgr = proxy.NewSocks5BridgeManager()
+	a.authBridgeMgr = proxy.NewAuthBridgeManager()
 
 	// 注入 DAO（必须在 InitData 之前）
 	conn := db.GetConn()
@@ -228,10 +228,10 @@ func (a *App) startup(ctx context.Context) {
 			})
 		}
 	}
-	a.socks5Mgr.OnBridgeDied = func(key string, err error) {
+	a.authBridgeMgr.OnBridgeDied = func(key string, err error) {
 		if a.ctx != nil {
 			runtime.EventsEmit(a.ctx, "proxy:bridge:died", map[string]interface{}{
-				"engine": "socks5",
+				"engine": "auth",
 				"key":    key[:8],
 				"error":  err.Error(),
 			})
@@ -407,7 +407,7 @@ func (a *App) clearProfileXrayBridges() {
 	a.bridgeMu.Unlock()
 }
 
-func (a *App) bindProfileSocks5Bridge(profileId string, bridgeKey string) {
+func (a *App) bindProfileAuthBridge(profileId string, bridgeKey string) {
 	profileId = strings.TrimSpace(profileId)
 	bridgeKey = strings.TrimSpace(bridgeKey)
 	if profileId == "" || bridgeKey == "" {
@@ -415,29 +415,29 @@ func (a *App) bindProfileSocks5Bridge(profileId string, bridgeKey string) {
 	}
 
 	a.bridgeMu.Lock()
-	a.socks5BridgeRefs[profileId] = bridgeKey
+	a.authBridgeRefs[profileId] = bridgeKey
 	a.bridgeMu.Unlock()
 }
 
-func (a *App) releaseProfileSocks5Bridge(profileId string) {
+func (a *App) releaseProfileAuthBridge(profileId string) {
 	profileId = strings.TrimSpace(profileId)
 	if profileId == "" {
 		return
 	}
 
 	a.bridgeMu.Lock()
-	bridgeKey := a.socks5BridgeRefs[profileId]
-	delete(a.socks5BridgeRefs, profileId)
+	bridgeKey := a.authBridgeRefs[profileId]
+	delete(a.authBridgeRefs, profileId)
 	a.bridgeMu.Unlock()
 
-	if bridgeKey != "" && a.socks5Mgr != nil {
-		a.socks5Mgr.ReleaseBridge(bridgeKey)
+	if bridgeKey != "" && a.authBridgeMgr != nil {
+		a.authBridgeMgr.ReleaseBridge(bridgeKey)
 	}
 }
 
-func (a *App) clearProfileSocks5Bridges() {
+func (a *App) clearProfileAuthBridges() {
 	a.bridgeMu.Lock()
-	a.socks5BridgeRefs = make(map[string]string)
+	a.authBridgeRefs = make(map[string]string)
 	a.bridgeMu.Unlock()
 }
 
