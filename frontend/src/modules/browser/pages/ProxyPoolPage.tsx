@@ -14,6 +14,7 @@ const PROXY_IP_HEALTH_CACHE_KEY = 'browser:proxyPool:ipHealthMap:v1'
 const PROXY_SOURCE_IGNORED_NAMES_KEY = 'browser:proxyPool:sourceIgnoredProxyNames:v1'
 const PROXY_GLOBAL_AUTO_REFRESH_KEY = 'browser:proxyPool:globalAutoRefreshEnabled:v1'
 const PROXY_GLOBAL_REFRESH_INTERVAL_KEY = 'browser:proxyPool:globalRefreshIntervalM:v1'
+const PROXY_VIEW_MODE_KEY = 'browser:proxyPool:viewMode:v1'
 const PROXY_LATENCY_CACHE_TTL_MS = 12 * 60 * 60 * 1000
 const PROXY_IP_HEALTH_CACHE_TTL_MS = 12 * 60 * 60 * 1000
 
@@ -76,6 +77,74 @@ interface URLImportSourceMeta {
   sourceAutoRefresh: boolean
   sourceRefreshIntervalM: number
   sourceLastRefreshAt: string
+}
+
+type ProxyViewMode = 'flat' | 'grouped'
+
+interface ProxyGroupInfo {
+  groupName: string
+  displayName: string
+  isSubscription: boolean
+  sourceId?: string
+  sourceUrl?: string
+  sourceNamePrefix?: string
+  sourceAutoRefresh?: boolean
+  sourceRefreshIntervalM?: number
+  sourceLastRefreshAt?: string
+  dnsServers?: string
+  proxyCount: number
+  proxies: ProxyDisplayInfo[]
+}
+
+function groupProxies(filteredList: ProxyDisplayInfo[], rawProxies: BrowserProxy[]): ProxyGroupInfo[] {
+  const groupMap = new Map<string, ProxyDisplayInfo[]>()
+  for (const item of filteredList) {
+    const key = item.groupName || ''
+    const arr = groupMap.get(key) || []
+    arr.push(item)
+    groupMap.set(key, arr)
+  }
+
+  const result: ProxyGroupInfo[] = []
+  const ungroupedKey = ''
+
+  for (const [groupName, proxies] of groupMap) {
+    if (groupName === ungroupedKey) continue
+
+    const rawInGroup = rawProxies.filter(p => (p.groupName || '') === groupName)
+    const subSource = rawInGroup.find(p => p.sourceId && p.sourceUrl)
+
+    result.push({
+      groupName,
+      displayName: groupName,
+      isSubscription: !!subSource,
+      sourceId: subSource?.sourceId,
+      sourceUrl: subSource?.sourceUrl,
+      sourceNamePrefix: subSource?.sourceNamePrefix,
+      sourceAutoRefresh: subSource?.sourceAutoRefresh,
+      sourceRefreshIntervalM: subSource?.sourceRefreshIntervalM,
+      sourceLastRefreshAt: subSource?.sourceLastRefreshAt,
+      dnsServers: subSource?.dnsServers,
+      proxyCount: proxies.length,
+      proxies,
+    })
+  }
+
+  // Sort groups alphabetically, ungrouped last
+  result.sort((a, b) => a.displayName.localeCompare(b.displayName, 'zh-CN'))
+
+  const ungrouped = groupMap.get(ungroupedKey)
+  if (ungrouped && ungrouped.length > 0) {
+    result.push({
+      groupName: '',
+      displayName: '未分组',
+      isSubscription: false,
+      proxyCount: ungrouped.length,
+      proxies: ungrouped,
+    })
+  }
+
+  return result
 }
 
 function parseProxyInfo(proxyConfig: string): { type: string; server: string; port: number } {
@@ -727,6 +796,17 @@ export function ProxyPoolPage() {
   const [editDirectHealthLoading, setEditDirectHealthLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  const [viewMode, setViewMode] = useState<ProxyViewMode>(() => {
+    try { const v = localStorage.getItem(PROXY_VIEW_MODE_KEY); return v === 'flat' ? 'flat' : 'grouped' } catch { return 'grouped' }
+  })
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [editGroupModalOpen, setEditGroupModalOpen] = useState(false)
+  const [editingGroup, setEditingGroup] = useState<ProxyGroupInfo | null>(null)
+  const [editGroupForm, setEditGroupForm] = useState({ groupName: '', sourceNamePrefix: '', sourceAutoRefresh: false, sourceRefreshIntervalM: 60, dnsServers: '' })
+  const [savingGroup, setSavingGroup] = useState(false)
+  const [deleteGroupConfirmOpen, setDeleteGroupConfirmOpen] = useState(false)
+  const [deletingGroupName, setDeletingGroupName] = useState<string | null>(null)
+
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [ipHealthDetailOpen, setIPHealthDetailOpen] = useState(false)
@@ -738,6 +818,10 @@ export function ProxyPoolPage() {
     const interval = normalizeRefreshIntervalM(Number(globalRefreshIntervalM || 0))
     return interval > 0 ? interval : 60
   }, [globalRefreshIntervalM])
+
+  useEffect(() => {
+    try { localStorage.setItem(PROXY_VIEW_MODE_KEY, viewMode) } catch {}
+  }, [viewMode])
 
   useEffect(() => {
     const cfg = readGlobalRefreshConfig()
@@ -1026,6 +1110,16 @@ export function ProxyPoolPage() {
     })
   }, [displayList, filterProtocol, filterKeyword, filterGroup, sortColumn, sortOrder, latencyMap])
 
+  const groupedList = useMemo(() => groupProxies(filteredList, proxies), [filteredList, proxies])
+
+  const toggleGroupCollapse = (groupName: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      next.has(groupName) ? next.delete(groupName) : next.add(groupName)
+      return next
+    })
+  }
+
   const allFilteredSelected = filteredList.length > 0 && filteredList.every(p => selectedIds.has(p.proxyId))
   const someFilteredSelected = filteredList.some(p => selectedIds.has(p.proxyId))
 
@@ -1245,7 +1339,6 @@ export function ProxyPoolPage() {
       ),
     },
     { key: 'proxyName', title: '代理名称', width: '180px', sortable: true },
-    { key: 'groupName', title: '分组', width: '100px', sortable: true, render: (val) => val ? <span className="px-1.5 py-0.5 text-xs rounded bg-[var(--color-accent)]/10 text-[var(--color-accent)]">{val}</span> : '-' },
     {
       key: 'source',
       title: '来源',
@@ -1642,6 +1735,144 @@ export function ProxyPoolPage() {
     }
   }
 
+  // ── 分组级操作 ──
+
+  const handleGroupBatchTestSpeed = async (group: ProxyGroupInfo) => {
+    const testable = group.proxies.filter(p => p.proxyConfig !== 'direct://')
+    if (testable.length === 0) return
+    const init: Record<string, number> = {}
+    testable.forEach(p => { init[p.proxyId] = -1 })
+    setLatencyMap(prev => ({ ...prev, ...init }))
+
+    const off = EventsOn('proxy:speed:result', (data: { proxyId: string; ok: boolean; latencyMs: number; error: string }) => {
+      const val = toLatencyValue(data.ok, data.latencyMs, data.error)
+      setLatencyMap(prev => ({ ...prev, [data.proxyId]: val }))
+    })
+
+    try {
+      const proxyIds = testable.map(p => p.proxyId)
+      const results = await browserProxyBatchTestSpeed(proxyIds, 20)
+      setLatencyMap(prev => {
+        const next = { ...prev }
+        results.forEach(result => {
+          next[result.proxyId] = toLatencyValue(result.ok, result.latencyMs, result.error)
+        })
+        return next
+      })
+    } finally {
+      off()
+    }
+  }
+
+  const handleGroupBatchCheckIPHealth = async (group: ProxyGroupInfo) => {
+    const testable = group.proxies.filter(p => p.proxyConfig !== 'direct://')
+    if (testable.length === 0) return
+    const ids = testable.map(p => p.proxyId)
+    const idSet = new Set(ids)
+    setCheckingIPHealthIds(prev => new Set([...Array.from(prev), ...ids]))
+
+    const off = EventsOn('proxy:iphealth:result', (data: ProxyIPHealthResult) => {
+      if (!data?.proxyId || !idSet.has(data.proxyId)) return
+      setIPHealthMap(prev => ({ ...prev, [data.proxyId]: data }))
+      setCheckingIPHealthIds(prev => { const next = new Set(prev); next.delete(data.proxyId); return next })
+    })
+
+    try {
+      const results = await browserProxyBatchCheckIPHealth(ids, 10)
+      setIPHealthMap(prev => {
+        const next = { ...prev }
+        results.forEach(result => {
+          if (result?.proxyId && idSet.has(result.proxyId)) next[result.proxyId] = result
+        })
+        return next
+      })
+    } finally {
+      off()
+      setCheckingIPHealthIds(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next })
+    }
+  }
+
+  const handleOpenEditGroup = (group: ProxyGroupInfo) => {
+    setEditingGroup(group)
+    setEditGroupForm({
+      groupName: group.groupName,
+      sourceNamePrefix: group.sourceNamePrefix || '',
+      sourceAutoRefresh: group.sourceAutoRefresh || false,
+      sourceRefreshIntervalM: group.sourceRefreshIntervalM || 60,
+      dnsServers: group.dnsServers || '',
+    })
+    setEditGroupModalOpen(true)
+  }
+
+  const handleSaveGroupEdit = async () => {
+    if (!editingGroup) return
+    const newGroupName = editGroupForm.groupName.trim()
+    if (!newGroupName && editingGroup.groupName) {
+      toast.error('分组名称不能为空')
+      return
+    }
+    setSavingGroup(true)
+    try {
+      const oldGroupName = editingGroup.groupName
+      const newProxies = proxies.map(p => {
+        if ((p.groupName || '') !== oldGroupName) return p
+        const updated = { ...p, groupName: newGroupName || undefined }
+        // 订阅分组：更新订阅元数据
+        if (editingGroup.isSubscription && p.sourceId && p.sourceUrl) {
+          updated.sourceNamePrefix = editGroupForm.sourceNamePrefix.trim() || undefined
+          updated.sourceAutoRefresh = editGroupForm.sourceAutoRefresh
+          updated.sourceRefreshIntervalM = editGroupForm.sourceAutoRefresh ? normalizeRefreshIntervalM(editGroupForm.sourceRefreshIntervalM) : 0
+          updated.dnsServers = editGroupForm.dnsServers.trim() || undefined
+        }
+        return updated
+      })
+      await saveProxies(newProxies)
+      setEditGroupModalOpen(false)
+      toast.success('分组已更新')
+    } catch (error: any) {
+      toast.error(error?.message || '保存失败')
+    } finally {
+      setSavingGroup(false)
+    }
+  }
+
+  const handleDeleteGroupClick = (groupName: string) => {
+    setDeletingGroupName(groupName)
+    setDeleteGroupConfirmOpen(true)
+  }
+
+  const handleDeleteGroupConfirm = async () => {
+    if (deletingGroupName === null) return
+    try {
+      const newProxies = proxies.filter(p => (p.groupName || '') !== deletingGroupName)
+      await saveProxies(newProxies)
+      setSelectedIds(prev => {
+        const groupProxyIds = new Set(proxies.filter(p => (p.groupName || '') === deletingGroupName).map(p => p.proxyId))
+        const next = new Set(prev)
+        groupProxyIds.forEach(id => next.delete(id))
+        return next
+      })
+      toast.success('分组已删除')
+    } catch (error: any) {
+      toast.error(error?.message || '删除失败')
+    }
+    setDeletingGroupName(null)
+  }
+
+  const handleToggleGroupAll = (group: ProxyGroupInfo) => {
+    const groupIds = group.proxies.map(p => p.proxyId)
+    const allSelected = groupIds.every(id => selectedIds.has(id))
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (allSelected) {
+        groupIds.forEach(id => next.delete(id))
+      } else {
+        groupIds.forEach(id => next.add(id))
+      }
+      return next
+    })
+  }
+
   const selectedCount = selectedIds.size
   const canParseImport = importMode === 'clash'
     ? !!importText.trim()
@@ -1697,6 +1928,16 @@ export function ProxyPoolPage() {
             <option value="all">全部分组</option>
             {groups.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
+          <div className="flex rounded-md border border-[var(--color-border)] overflow-hidden">
+            <button
+              className={`px-2.5 py-1.5 text-xs ${viewMode === 'grouped' ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-bg-secondary)] text-[var(--color-text-muted)]'}`}
+              onClick={() => setViewMode('grouped')}
+            >分组</button>
+            <button
+              className={`px-2.5 py-1.5 text-xs ${viewMode === 'flat' ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-bg-secondary)] text-[var(--color-text-muted)]'}`}
+              onClick={() => setViewMode('flat')}
+            >平铺</button>
+          </div>
           {(filterProtocol !== 'all' || filterKeyword || filterGroup !== 'all') && (
             <Button size="sm" variant="ghost" onClick={() => { setFilterProtocol('all'); setFilterKeyword(''); setFilterGroup('all') }}>清除筛选</Button>
           )}
@@ -1736,19 +1977,94 @@ export function ProxyPoolPage() {
             </Button>
           )}
         </div>
-        <Table
-          columns={columns}
-          data={filteredList}
-          rowKey="proxyId"
-          loading={loading}
-          emptyText="暂无代理配置，点击上方按钮添加或导入"
-          sortColumn={sortColumn}
-          sortOrder={sortOrder}
-          onSort={({ column, order }) => {
-            setSortColumn(column)
-            setSortOrder(order)
-          }}
-        />
+        {viewMode === 'flat' ? (
+          <Table
+            columns={columns}
+            data={filteredList}
+            rowKey="proxyId"
+            loading={loading}
+            emptyText="暂无代理配置，点击上方按钮添加或导入"
+            sortColumn={sortColumn}
+            sortOrder={sortOrder}
+            onSort={({ column, order }) => {
+              setSortColumn(column)
+              setSortOrder(order)
+            }}
+          />
+        ) : loading ? (
+          <div className="py-12 text-center text-sm text-[var(--color-text-muted)]">加载中...</div>
+        ) : groupedList.length === 0 ? (
+          <div className="py-12 text-center text-sm text-[var(--color-text-muted)]">暂无代理配置，点击上方按钮添加或导入</div>
+        ) : (
+          <div>
+            {groupedList.map(group => {
+              const collapsed = collapsedGroups.has(group.groupName)
+              const groupAllSelected = group.proxies.length > 0 && group.proxies.every(p => selectedIds.has(p.proxyId))
+              const groupSomeSelected = group.proxies.some(p => selectedIds.has(p.proxyId))
+              return (
+                <div key={group.groupName} className="border-b border-[var(--color-border)] last:border-b-0">
+                  {/* 分组头部 */}
+                  <div
+                    className="flex items-center gap-3 px-4 py-2.5 bg-[var(--color-bg-secondary)] cursor-pointer select-none hover:bg-[var(--color-bg-muted)] transition-colors"
+                    onClick={() => toggleGroupCollapse(group.groupName)}
+                  >
+                    <svg
+                      className={`w-4 h-4 text-[var(--color-text-muted)] transition-transform ${collapsed ? '' : 'rotate-90'}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <input
+                      type="checkbox"
+                      checked={groupAllSelected}
+                      ref={el => { if (el) el.indeterminate = groupSomeSelected && !groupAllSelected }}
+                      onChange={(e) => { e.stopPropagation(); handleToggleGroupAll(group) }}
+                      onClick={e => e.stopPropagation()}
+                      className="w-4 h-4 rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer"
+                    />
+                    <span className="font-medium text-sm text-[var(--color-text-primary)]">{group.displayName}</span>
+                    <span className="text-xs text-[var(--color-text-muted)]">({group.proxyCount})</span>
+                    {group.isSubscription && (
+                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/10 text-blue-500 font-medium">订阅</span>
+                    )}
+                    {group.isSubscription && group.sourceUrl && (
+                      <span className="text-xs text-[var(--color-text-muted)] truncate max-w-[200px]" title={group.sourceUrl}>
+                        {sourceHostLabel(group.sourceUrl)}
+                      </span>
+                    )}
+                    <div className="ml-auto flex gap-1.5" onClick={e => e.stopPropagation()}>
+                      {group.isSubscription && group.sourceId && (
+                        <Button
+                          size="sm" variant="ghost"
+                          onClick={() => void refreshSingleSource(group.sourceId!, false)}
+                          loading={refreshingSourceIds.has(group.sourceId)}
+                        >刷新订阅</Button>
+                      )}
+                      <Button size="sm" variant="ghost" onClick={() => handleGroupBatchTestSpeed(group)}>批量测速</Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleGroupBatchCheckIPHealth(group)}>IP检测</Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleOpenEditGroup(group)}>编辑</Button>
+                      <Button size="sm" variant="danger" onClick={() => handleDeleteGroupClick(group.groupName)}>删除</Button>
+                    </div>
+                  </div>
+                  {/* 分组内容 */}
+                  {!collapsed && (
+                    <Table
+                      columns={columns}
+                      data={group.proxies}
+                      rowKey="proxyId"
+                      sortColumn={sortColumn}
+                      sortOrder={sortOrder}
+                      onSort={({ column, order }) => {
+                        setSortColumn(column)
+                        setSortOrder(order)
+                      }}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </Card>
 
       <Modal open={importModalOpen} onClose={() => setImportModalOpen(false)} title="导入代理配置" width="600px"
@@ -1928,6 +2244,83 @@ export function ProxyPoolPage() {
           )}
         </div>
       </Modal>
+
+      {/* 编辑分组弹窗 */}
+      <Modal
+        open={editGroupModalOpen}
+        onClose={() => setEditGroupModalOpen(false)}
+        title={editingGroup?.isSubscription ? '编辑订阅分组' : '编辑分组'}
+        width="500px"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditGroupModalOpen(false)}>取消</Button>
+            <Button onClick={handleSaveGroupEdit} loading={savingGroup}>保存</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <FormItem label="分组名称" required>
+            <Input
+              value={editGroupForm.groupName}
+              onChange={e => setEditGroupForm(prev => ({ ...prev, groupName: e.target.value }))}
+              placeholder="分组名称"
+            />
+          </FormItem>
+          {editingGroup?.isSubscription && (
+            <>
+              <FormItem label="订阅 URL">
+                <div className="flex items-center gap-2">
+                  <Input value={editingGroup.sourceUrl || ''} disabled className="flex-1" />
+                  <Button size="sm" variant="ghost" onClick={() => {
+                    if (editingGroup.sourceUrl) {
+                      navigator.clipboard.writeText(editingGroup.sourceUrl)
+                      toast.success('已复制')
+                    }
+                  }}>复制</Button>
+                </div>
+              </FormItem>
+              <FormItem label="名称前缀（可选）">
+                <Input
+                  value={editGroupForm.sourceNamePrefix}
+                  onChange={e => setEditGroupForm(prev => ({ ...prev, sourceNamePrefix: e.target.value }))}
+                  placeholder="例如：HK、US、机场A"
+                />
+              </FormItem>
+              <div className="flex items-center gap-3">
+                <FormItem label="自动刷新">
+                  <Switch
+                    checked={editGroupForm.sourceAutoRefresh}
+                    onChange={checked => setEditGroupForm(prev => ({ ...prev, sourceAutoRefresh: checked }))}
+                  />
+                </FormItem>
+                {editGroupForm.sourceAutoRefresh && (
+                  <FormItem label="刷新间隔（分钟）">
+                    <Input
+                      type="number"
+                      min={5}
+                      max={1440}
+                      value={String(editGroupForm.sourceRefreshIntervalM)}
+                      onChange={e => setEditGroupForm(prev => ({ ...prev, sourceRefreshIntervalM: Number(e.target.value) || 60 }))}
+                      className="w-24"
+                    />
+                  </FormItem>
+                )}
+              </div>
+              <FormItem label="DNS 配置（可选）">
+                <Textarea
+                  value={editGroupForm.dnsServers}
+                  onChange={e => setEditGroupForm(prev => ({ ...prev, dnsServers: e.target.value }))}
+                  rows={4}
+                  placeholder={`dns:\n  enable: true\n  nameserver:\n    - 119.29.29.29`}
+                />
+              </FormItem>
+            </>
+          )}
+        </div>
+      </Modal>
+
+      <ConfirmModal open={deleteGroupConfirmOpen} onClose={() => setDeleteGroupConfirmOpen(false)} onConfirm={handleDeleteGroupConfirm}
+        title="删除分组" content={`确定要删除分组「${deletingGroupName || ''}」及其所有代理吗？此操作不可恢复。`} confirmText="删除" danger />
 
       <ConfirmModal open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} onConfirm={handleDeleteConfirm}
         title="确认删除" content="确定要删除这个代理吗？此操作不可恢复。" confirmText="删除" danger />
