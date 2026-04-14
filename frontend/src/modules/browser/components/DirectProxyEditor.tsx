@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { Button, FormItem, Input, Select } from '../../../shared/components'
 
 interface DirectImportForm {
@@ -40,6 +42,7 @@ interface DirectProxyEditorProps {
   onTestSpeed: () => void
   onHealthCheck: () => void
   showProxyName?: boolean
+  readOnly?: boolean
 }
 
 export function DirectProxyEditor({
@@ -52,8 +55,10 @@ export function DirectProxyEditor({
   onTestSpeed,
   onHealthCheck,
   showProxyName,
+  readOnly,
 }: DirectProxyEditorProps) {
   const showName = showProxyName ?? true
+  const [showPassword, setShowPassword] = useState(false)
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -62,6 +67,7 @@ export function DirectProxyEditor({
             options={[...DIRECT_PROXY_PROTOCOL_OPTIONS]}
             value={form.protocol}
             onChange={e => onFormChange(prev => ({ ...prev, protocol: e.target.value as DirectImportForm['protocol'] }))}
+            disabled={readOnly}
           />
         </FormItem>
         {showName && (
@@ -70,6 +76,7 @@ export function DirectProxyEditor({
               value={form.proxyName}
               onChange={e => onFormChange(prev => ({ ...prev, proxyName: e.target.value }))}
               placeholder="例如：香港节点"
+              disabled={readOnly}
             />
           </FormItem>
         )}
@@ -78,6 +85,7 @@ export function DirectProxyEditor({
             value={form.server}
             onChange={e => onFormChange(prev => ({ ...prev, server: e.target.value }))}
             placeholder="例如：127.0.0.1 或 hk.example.com"
+            disabled={readOnly}
           />
         </FormItem>
         <FormItem label="代理端口" required>
@@ -88,6 +96,7 @@ export function DirectProxyEditor({
             value={form.port}
             onChange={e => onFormChange(prev => ({ ...prev, port: e.target.value }))}
             placeholder="例如：1080"
+            disabled={readOnly}
           />
         </FormItem>
         <FormItem label="账号（可选）">
@@ -95,19 +104,30 @@ export function DirectProxyEditor({
             value={form.username}
             onChange={e => onFormChange(prev => ({ ...prev, username: e.target.value }))}
             placeholder="留空则不使用认证"
+            disabled={readOnly}
           />
         </FormItem>
         <FormItem label="密码（可选）">
-          <Input
-            type="password"
-            value={form.password}
-            onChange={e => onFormChange(prev => ({ ...prev, password: e.target.value }))}
-            placeholder="留空则不使用密码"
-          />
+          <div className="relative">
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              value={form.password}
+              onChange={e => onFormChange(prev => ({ ...prev, password: e.target.value }))}
+              placeholder="留空则不使用密码"
+              disabled={readOnly}
+              className="pr-9"
+            />
+            <button
+              type="button"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors"
+              onClick={() => setShowPassword(v => !v)}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
         </FormItem>
-      </div>
-      <div className="space-y-2 mt-1">
-        <div className="flex gap-2">
+        <div className="flex items-end gap-2">
           <Button
             size="sm"
             variant="secondary"
@@ -127,6 +147,8 @@ export function DirectProxyEditor({
             IP 健康检测
           </Button>
         </div>
+      </div>
+      <div className="space-y-2 mt-1">
         {testSpeedResult && (
           <div className={`text-sm px-3 py-2 rounded ${testSpeedResult.ok ? 'bg-[var(--color-bg-secondary)] text-[var(--color-success)]' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
             {testSpeedResult.ok

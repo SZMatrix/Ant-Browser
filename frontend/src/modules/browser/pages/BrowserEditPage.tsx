@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { FolderOpen, Layers } from 'lucide-react'
+import { FolderOpen, Layers, Pencil } from 'lucide-react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Textarea, toast } from '../../../shared/components'
 import type { BrowserCore, BrowserProfileInput, BrowserProxy, BrowserGroup } from '../types'
 import { createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, openUserDataDir, updateBrowserProfile, proxyTestSpeed, proxyCheckIPHealth } from '../api'
@@ -138,6 +138,27 @@ export function BrowserEditPage() {
     }
     loadData()
   }, [id, isCreate])
+
+  const isPoolProxy = !!(formData.proxyId && formData.proxyId !== '__direct__' && formData.proxyId !== '__custom__')
+
+  useEffect(() => {
+    if (isPoolProxy) {
+      const proxy = proxies.find(p => p.proxyId === formData.proxyId)
+      if (proxy?.proxyConfig) {
+        const parsed = parseDirectProxyConfig(proxy.proxyConfig)
+        if (parsed.ok) {
+          setDirectForm(prev => ({
+            ...prev,
+            protocol: parsed.form.protocol,
+            server: parsed.form.server,
+            port: parsed.form.port,
+            username: parsed.form.username,
+            password: parsed.form.password,
+          }))
+        }
+      }
+    }
+  }, [formData.proxyId, proxies])
 
   const handleChange = (field: keyof BrowserProfileInput, value: string | string[]) => {
     setIsDirty(true)
@@ -364,10 +385,15 @@ export function BrowserEditPage() {
                   <Layers className="w-4 h-4" />
                 </Button>
               )}
+              {isPoolProxy && (
+                <Button variant="secondary" size="sm" onClick={() => handleChange('proxyId', '__custom__')} title="转为自定义编辑">
+                  <Pencil className="w-4 h-4" />
+                </Button>
+              )}
             </div>
           </FormItem>
         </div>
-        {formData.proxyId === '__custom__' && (
+        {(formData.proxyId === '__custom__' || isPoolProxy) && (
           <>
             <hr className="my-4 border-[var(--color-border)]" />
             <DirectProxyEditor
@@ -380,6 +406,7 @@ export function BrowserEditPage() {
               onTestSpeed={handleDirectTestSpeed}
               onHealthCheck={handleDirectHealthCheck}
               showProxyName={false}
+              readOnly={isPoolProxy}
             />
           </>
         )}

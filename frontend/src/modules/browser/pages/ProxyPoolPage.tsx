@@ -7,6 +7,7 @@ import { EventsOn } from '../../../wailsjs/runtime/runtime'
 import yaml from 'js-yaml'
 import { ClashImportTab } from '../components/ClashImportTab'
 import { DirectProxyEditor } from '../components/DirectProxyEditor'
+import { parseDirectProxyConfig, buildDirectProxyConfig as buildDirectProxyConfigFromForm } from '../utils/directProxy'
 
 const PROXY_LATENCY_CACHE_KEY = 'browser:proxyPool:latencyMap:v1'
 const PROXY_IP_HEALTH_CACHE_KEY = 'browser:proxyPool:ipHealthMap:v1'
@@ -718,6 +719,12 @@ export function ProxyPoolPage() {
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editingProxy, setEditingProxy] = useState<BrowserProxy | null>(null)
   const [editForm, setEditForm] = useState({ proxyName: '', proxyConfig: '', dnsServers: '', groupName: '' })
+  const [editIsDirectProxy, setEditIsDirectProxy] = useState(false)
+  const [editDirectForm, setEditDirectForm] = useState<DirectImportForm>(() => ({ ...INITIAL_DIRECT_IMPORT_FORM }))
+  const [editDirectTestSpeedResult, setEditDirectTestSpeedResult] = useState<{ ok: boolean; latencyMs: number; error: string } | null>(null)
+  const [editDirectTestSpeedLoading, setEditDirectTestSpeedLoading] = useState(false)
+  const [editDirectHealthResult, setEditDirectHealthResult] = useState<{ ok: boolean; ip: string; country: string; fraudScore: number; isResidential: boolean; error: string } | null>(null)
+  const [editDirectHealthLoading, setEditDirectHealthLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -1349,18 +1356,39 @@ export function ProxyPoolPage() {
     if (proxy) {
       setEditingProxy(proxy)
       setEditForm({ proxyName: proxy.proxyName, proxyConfig: proxy.proxyConfig, dnsServers: proxy.dnsServers || '', groupName: proxy.groupName || '' })
+      const { form: parsedDirect, ok } = parseDirectProxyConfig(proxy.proxyConfig)
+      if (ok && proxy.proxyConfig.trim()) {
+        setEditIsDirectProxy(true)
+        setEditDirectForm({ ...parsedDirect, proxyName: proxy.proxyName })
+      } else {
+        setEditIsDirectProxy(false)
+        setEditDirectForm({ ...INITIAL_DIRECT_IMPORT_FORM })
+      }
+      setEditDirectTestSpeedResult(null)
+      setEditDirectHealthResult(null)
       setEditModalOpen(true)
     }
   }
 
   const handleSaveProxy = async () => {
-    if (!editForm.proxyName.trim()) { toast.error('请输入代理名称'); return }
+    const proxyName = editIsDirectProxy ? editDirectForm.proxyName : editForm.proxyName
+    if (!proxyName.trim()) { toast.error('请输入代理名称'); return }
     if (!editingProxy) return
     setSaving(true)
     try {
+      let proxyConfig = editForm.proxyConfig
+      if (editIsDirectProxy) {
+        try {
+          proxyConfig = buildDirectProxyConfigFromForm(editDirectForm)
+        } catch (err: any) {
+          toast.error(err?.message || '代理配置无效')
+          setSaving(false)
+          return
+        }
+      }
       const newProxies = proxies.map(p =>
         p.proxyId === editingProxy.proxyId
-          ? { ...p, proxyName: editForm.proxyName, proxyConfig: editForm.proxyConfig, dnsServers: editForm.dnsServers, groupName: editForm.groupName }
+          ? { ...p, proxyName: proxyName, proxyConfig, dnsServers: editForm.dnsServers, groupName: editForm.groupName }
           : p
       )
       await saveProxies(newProxies)
@@ -1451,6 +1479,53 @@ export function ProxyPoolPage() {
       setDirectHealthResult({ ok: false, ip: '', country: '', fraudScore: 0, isResidential: false, error: error?.message || '检测失败' })
     } finally {
       setDirectHealthLoading(false)
+    }
+  }
+
+  const handleEditDirectTestSpeed = async () => {
+    let config: string
+    try {
+      config = buildDirectProxyConfigFromForm(editDirectForm)
+    } catch {
+      toast.error('请先填写完整的代理地址和端口')
+      return
+    }
+    setEditDirectTestSpeedLoading(true)
+    setEditDirectTestSpeedResult(null)
+    try {
+      const result = await proxyTestSpeed(config)
+      setEditDirectTestSpeedResult({ ok: result.ok, latencyMs: result.latencyMs, error: result.error })
+    } catch (error: any) {
+      setEditDirectTestSpeedResult({ ok: false, latencyMs: 0, error: error?.message || '测速失败' })
+    } finally {
+      setEditDirectTestSpeedLoading(false)
+    }
+  }
+
+  const handleEditDirectHealthCheck = async () => {
+    let config: string
+    try {
+      config = buildDirectProxyConfigFromForm(editDirectForm)
+    } catch {
+      toast.error('请先填写完整的代理地址和端口')
+      return
+    }
+    setEditDirectHealthLoading(true)
+    setEditDirectHealthResult(null)
+    try {
+      const result = await proxyCheckIPHealth(config)
+      setEditDirectHealthResult({
+        ok: result.ok,
+        ip: result.ip || '',
+        country: result.country || '',
+        fraudScore: result.fraudScore || 0,
+        isResidential: result.isResidential || false,
+        error: result.error || '',
+      })
+    } catch (error: any) {
+      setEditDirectHealthResult({ ok: false, ip: '', country: '', fraudScore: 0, isResidential: false, error: error?.message || '检测失败' })
+    } finally {
+      setEditDirectHealthLoading(false)
     }
   }
 
@@ -1783,23 +1858,50 @@ export function ProxyPoolPage() {
       <Modal open={editModalOpen} onClose={() => setEditModalOpen(false)} title="编辑代理" width="500px"
         footer={<><Button variant="secondary" onClick={() => setEditModalOpen(false)}>取消</Button><Button onClick={handleSaveProxy} loading={saving}>保存</Button></>}>
         <div className="space-y-4">
-          <FormItem label="代理名称" required>
-            <Input value={editForm.proxyName} onChange={e => setEditForm(prev => ({ ...prev, proxyName: e.target.value }))} placeholder="例如：香港节点" />
-          </FormItem>
-          <FormItem label="分组名称（可选）">
-            <Input value={editForm.groupName} onChange={e => setEditForm(prev => ({ ...prev, groupName: e.target.value }))} placeholder="例如：香港、美国" list="edit-proxy-groups-datalist" />
-            <datalist id="edit-proxy-groups-datalist">
-              {groups.map(g => <option key={g} value={g} />)}
-            </datalist>
-          </FormItem>
-          <FormItem label="代理配置">
-            <Textarea value={editForm.proxyConfig} onChange={e => setEditForm(prev => ({ ...prev, proxyConfig: e.target.value }))} rows={10} placeholder="支持 Clash YAML、http://、https://、socks5:// 代理配置" />
-          </FormItem>
-          <FormItem label="DNS 服务器（可选）">
-            <Textarea value={editForm.dnsServers} onChange={e => setEditForm(prev => ({ ...prev, dnsServers: e.target.value }))} rows={6}
-              placeholder={`dns:\n  enable: true\n  nameserver:\n    - 119.29.29.29\n    - 223.5.5.5`} />
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">支持 Clash dns: YAML 格式，主要用于 Clash / 桥接代理；直连 HTTP/SOCKS5 通常不会使用这里的 DNS 配置</p>
-          </FormItem>
+          {editIsDirectProxy ? (
+            <>
+              <FormItem label="代理名称" required>
+                <Input value={editDirectForm.proxyName} onChange={e => setEditDirectForm(prev => ({ ...prev, proxyName: e.target.value }))} placeholder="例如：香港节点" />
+              </FormItem>
+              <FormItem label="分组名称（可选）">
+                <Input value={editForm.groupName} onChange={e => setEditForm(prev => ({ ...prev, groupName: e.target.value }))} placeholder="例如：香港、美国" list="edit-proxy-groups-datalist" />
+                <datalist id="edit-proxy-groups-datalist">
+                  {groups.map(g => <option key={g} value={g} />)}
+                </datalist>
+              </FormItem>
+              <DirectProxyEditor
+                form={editDirectForm}
+                onFormChange={setEditDirectForm}
+                testSpeedResult={editDirectTestSpeedResult}
+                testSpeedLoading={editDirectTestSpeedLoading}
+                healthResult={editDirectHealthResult}
+                healthLoading={editDirectHealthLoading}
+                onTestSpeed={handleEditDirectTestSpeed}
+                onHealthCheck={handleEditDirectHealthCheck}
+                showProxyName={false}
+              />
+            </>
+          ) : (
+            <>
+              <FormItem label="代理名称" required>
+                <Input value={editForm.proxyName} onChange={e => setEditForm(prev => ({ ...prev, proxyName: e.target.value }))} placeholder="例如：香港节点" />
+              </FormItem>
+              <FormItem label="分组名称（可选）">
+                <Input value={editForm.groupName} onChange={e => setEditForm(prev => ({ ...prev, groupName: e.target.value }))} placeholder="例如：香港、美国" list="edit-proxy-groups-datalist" />
+                <datalist id="edit-proxy-groups-datalist">
+                  {groups.map(g => <option key={g} value={g} />)}
+                </datalist>
+              </FormItem>
+              <FormItem label="代理配置">
+                <Textarea value={editForm.proxyConfig} onChange={e => setEditForm(prev => ({ ...prev, proxyConfig: e.target.value }))} rows={10} placeholder="支持 Clash YAML、http://、https://、socks5:// 代理配置" />
+              </FormItem>
+              <FormItem label="DNS 服务器（可选）">
+                <Textarea value={editForm.dnsServers} onChange={e => setEditForm(prev => ({ ...prev, dnsServers: e.target.value }))} rows={6}
+                  placeholder={`dns:\n  enable: true\n  nameserver:\n    - 119.29.29.29\n    - 223.5.5.5`} />
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">支持 Clash dns: YAML 格式，主要用于 Clash / 桥接代理；直连 HTTP/SOCKS5 通常不会使用这里的 DNS 配置</p>
+              </FormItem>
+            </>
+          )}
         </div>
       </Modal>
 
