@@ -165,7 +165,7 @@ export function AutomationPage() {
   const activeTabMeta = AUTOMATION_TABS.find(tab => tab.key === activeTab) || AUTOMATION_TABS[0]
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-5 animate-fade-in pt-5">
       <Card>
         <div className="flex items-start justify-between gap-4">
           <div>

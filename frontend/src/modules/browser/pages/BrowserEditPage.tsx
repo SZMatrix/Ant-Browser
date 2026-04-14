@@ -32,7 +32,7 @@ export function BrowserEditPage() {
     userDataDir: '',
     coreId: '',
     fingerprintArgs: [],
-    proxyId: '',
+    proxyId: '__direct__',
     proxyConfig: '',
     launchArgs: [],
     tags: [],
@@ -101,8 +101,24 @@ export function BrowserEditPage() {
         groupId: current.groupId || '',
       })
       setLaunchArgsText(currentLaunchArgs.join('\n'))
-      // Detect custom proxy: proxyId empty but proxyConfig present
-      if (!current.proxyId && current.proxyConfig) {
+      // Detect direct mode: proxyId is __direct__, restore saved custom config if any
+      if (current.proxyId === '__direct__') {
+        if (current.proxyConfig) {
+          const parsed = parseDirectProxyConfig(current.proxyConfig)
+          if (parsed.ok) {
+            setDirectForm(prev => ({
+              ...prev,
+              protocol: parsed.form.protocol,
+              server: parsed.form.server,
+              port: parsed.form.port,
+              username: parsed.form.username,
+              password: parsed.form.password,
+            }))
+          }
+        }
+        setFormData(prev => ({ ...prev, proxyId: '__direct__' }))
+      // Detect custom proxy: proxyId empty but proxyConfig present (backward compat)
+      } else if (!current.proxyId && current.proxyConfig) {
         const parsed = parseDirectProxyConfig(current.proxyConfig)
         if (parsed.ok) {
           setDirectForm(prev => ({
@@ -115,6 +131,9 @@ export function BrowserEditPage() {
           }))
         }
         setFormData(prev => ({ ...prev, proxyId: '__custom__' }))
+      // No proxyId and no proxyConfig: treat as direct
+      } else if (!current.proxyId) {
+        setFormData(prev => ({ ...prev, proxyId: '__direct__' }))
       }
     }
     loadData()
@@ -144,7 +163,27 @@ export function BrowserEditPage() {
         return
       }
       proxyId = ''
+    } else if (formData.proxyId === '__direct__') {
+      proxyId = '__direct__'
+      // Preserve custom proxy config so switching back to custom retains settings
+      if (directForm.server && directForm.port) {
+        try {
+          proxyConfig = buildDirectProxyConfig({
+            protocol: directForm.protocol,
+            server: directForm.server,
+            port: directForm.port,
+            username: directForm.username,
+            password: directForm.password,
+          })
+        } catch {
+          proxyConfig = ''
+        }
+      } else {
+        proxyConfig = ''
+      }
     } else if (proxyId) {
+      proxyConfig = ''
+    } else {
       proxyConfig = ''
     }
     const payload: BrowserProfileInput = {
@@ -240,14 +279,16 @@ export function BrowserEditPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">{isCreate ? '新建配置' : '编辑配置'}</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">完善指纹与启动参数</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={handleBack}>返回列表</Button>
-          <Button size="sm" onClick={handleSave} loading={saving}>保存配置</Button>
+      <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-5 px-5 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">{isCreate ? '新建配置' : '编辑配置'}</h1>
+            <p className="text-sm text-[var(--color-text-muted)] mt-1">完善指纹与启动参数</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={handleBack}>返回列表</Button>
+            <Button size="sm" onClick={handleSave} loading={saving}>保存配置</Button>
+          </div>
         </div>
       </div>
 
@@ -311,7 +352,7 @@ export function BrowserEditPage() {
                 value={formData.proxyId}
                 onChange={e => handleChange('proxyId', e.target.value)}
                 options={[
-                  { value: '', label: '不使用代理池' },
+                  { value: '__direct__', label: '直连' },
                   { value: '__custom__', label: '自定义' },
                   { divider: true as const },
                   ...proxies.map(p => ({ value: p.proxyId, label: p.proxyName || p.proxyId })),

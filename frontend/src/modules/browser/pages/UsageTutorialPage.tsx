@@ -94,7 +94,7 @@ export function UsageTutorialPage() {
   const launchCodeCurlSample = buildLaunchCodeCurlSample(launchBaseUrl, apiAuth)
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-5 animate-fade-in pt-5">
       <Card>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>

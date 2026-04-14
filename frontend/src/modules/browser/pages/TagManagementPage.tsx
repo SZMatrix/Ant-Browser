@@ -331,16 +331,18 @@ export function TagManagementPage() {
       {/* 右侧内容区 */}
       <div className="flex-1 flex flex-col overflow-hidden p-5 gap-4">
         {/* 页头 */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">标签管理</h1>
-            <p className="text-sm text-[var(--color-text-muted)] mt-0.5">
-              {selectedTag ? (
-                <>标签 <span className="text-[var(--color-primary)]">「{selectedTag}」</span> 下共 {displayProfiles.length} 个实例</>
-              ) : (
-                <>全部实例，共 {profiles.length} 个</>
-              )}
-            </p>
+        <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-5 px-5 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">标签管理</h1>
+              <p className="text-sm text-[var(--color-text-muted)] mt-0.5">
+                {selectedTag ? (
+                  <>标签 <span className="text-[var(--color-primary)]">「{selectedTag}」</span> 下共 {displayProfiles.length} 个实例</>
+                ) : (
+                  <>全部实例，共 {profiles.length} 个</>
+                )}
+              </p>
+            </div>
           </div>
         </div>
 

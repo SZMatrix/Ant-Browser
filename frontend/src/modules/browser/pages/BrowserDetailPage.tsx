@@ -189,6 +189,7 @@ export function BrowserDetailPage() {
   return (
     <div className="space-y-5 animate-fade-in">
       {/* 页头 */}
+      <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-5 px-5 py-3">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">实例详情</h1>
@@ -202,6 +203,7 @@ export function BrowserDetailPage() {
             <Button variant="ghost" size="sm">返回列表</Button>
           </Link>
         </div>
+      </div>
       </div>
 
       {/* Tab 导航 */}

@@ -977,8 +977,9 @@ export function BrowserListPage() {
   ]
 
   return (
-    <div className="overflow-auto p-5 space-y-5 animate-fade-in h-full">
+    <div className="overflow-auto px-5 pb-5 space-y-5 animate-fade-in h-full">
       {/* 页头 */}
+      <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-5 px-5 py-3">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">实例列表</h1>
@@ -1013,6 +1014,7 @@ export function BrowserListPage() {
           <span className="w-px h-4 bg-[var(--color-border-muted)] mx-1 self-center"></span>
           <Link to="/browser/edit/new"><Button size="sm"><Play className="w-4 h-4" />新建配置</Button></Link>
         </div>
+      </div>
       </div>
 
       {/* 可折叠的统计+筛选区 */}

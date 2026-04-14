@@ -386,15 +386,17 @@ export function CoreManagementPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">内核管理</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">管理 Chrome 内核版本和全局设置</p>
-        </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setDownloadModalOpen(true)}>下载内核</Button>
-          <Button size="sm" variant="secondary" onClick={handleScan} loading={scanning}>扫描内核</Button>
-          <Button size="sm" onClick={handleAdd}>新增内核</Button>
+      <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-5 px-5 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">内核管理</h1>
+            <p className="text-sm text-[var(--color-text-muted)] mt-1">管理 Chrome 内核版本和全局设置</p>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setDownloadModalOpen(true)}>下载内核</Button>
+            <Button size="sm" variant="secondary" onClick={handleScan} loading={scanning}>扫描内核</Button>
+            <Button size="sm" onClick={handleAdd}>新增内核</Button>
+          </div>
         </div>
       </div>
 

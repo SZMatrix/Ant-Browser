@@ -65,17 +65,19 @@ export function BookmarkSettingsPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">默认书签</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">新建实例首次启动时自动写入书签栏，已有书签不受影响</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setResetOpen(true)}>
-            <RotateCcw className="w-4 h-4 mr-1.5" />
-            恢复默认
-          </Button>
-          <Button size="sm" onClick={handleSave} loading={saving}>保存</Button>
+      <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-5 px-5 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">默认书签</h1>
+            <p className="text-sm text-[var(--color-text-muted)] mt-1">新建实例首次启动时自动写入书签栏，已有书签不受影响</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setResetOpen(true)}>
+              <RotateCcw className="w-4 h-4 mr-1.5" />
+              恢复默认
+            </Button>
+            <Button size="sm" onClick={handleSave} loading={saving}>保存</Button>
+          </div>
         </div>
       </div>
 

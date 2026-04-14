@@ -312,20 +312,22 @@ export function SettingsPage() {
   return (
     <div className="space-y-6 w-full animate-fade-in">
       {/* 页面标题 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">系统设置</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">配置应用的各项参数</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={handleReset}>
-            <RotateCcw className="w-4 h-4" />
-            重置
-          </Button>
-          <Button variant="danger" size="sm" onClick={handleSave} loading={saving} disabled={!hasChanges}>
-            <Save className="w-4 h-4" />
-            保存
-          </Button>
+      <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-5 px-5 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">系统设置</h1>
+            <p className="text-sm text-[var(--color-text-muted)] mt-1">配置应用的各项参数</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={handleReset}>
+              <RotateCcw className="w-4 h-4" />
+              重置
+            </Button>
+            <Button variant="danger" size="sm" onClick={handleSave} loading={saving} disabled={!hasChanges}>
+              <Save className="w-4 h-4" />
+              保存
+            </Button>
+          </div>
         </div>
       </div>
 

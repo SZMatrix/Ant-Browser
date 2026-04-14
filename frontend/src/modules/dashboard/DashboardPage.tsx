@@ -99,9 +99,11 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">控制台</h1>
-        <p className="text-sm text-[var(--color-text-muted)] mt-1">浏览器指纹管理平台概览</p>
+      <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-5 px-5 py-3">
+        <div className="pb-4">
+          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">控制台</h1>
+          <p className="text-sm text-[var(--color-text-muted)] mt-1">浏览器指纹管理平台概览</p>
+        </div>
       </div>
 
       {/* 统计卡片 */}

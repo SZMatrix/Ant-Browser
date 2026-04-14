@@ -1574,24 +1574,26 @@ export function ProxyPoolPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">代理池配置</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">管理代理配置，支持 Clash 订阅、HTTP、HTTPS、SOCKS5</p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleRefreshAllSources(false)}
-            loading={refreshingAllSources}
-            disabled={!hasURLImportSources}
-          >
-            刷新订阅
-          </Button>
-          <Button size="sm" variant="secondary" onClick={handleCheckAllIPHealth} loading={checkingAllIPHealth} disabled={filteredList.length === 0}>检测IP健康</Button>
-          <Button size="sm" variant="secondary" onClick={handleTestAll} loading={testingAll} disabled={filteredList.length === 0}>测试全部</Button>
-          <Button size="sm" onClick={() => setImportModalOpen(true)}>导入代理</Button>
+      <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-5 px-5 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">代理池配置</h1>
+            <p className="text-sm text-[var(--color-text-muted)] mt-1">管理代理配置，支持 Clash 订阅、HTTP、HTTPS、SOCKS5</p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void handleRefreshAllSources(false)}
+              loading={refreshingAllSources}
+              disabled={!hasURLImportSources}
+            >
+              刷新订阅
+            </Button>
+            <Button size="sm" variant="secondary" onClick={handleCheckAllIPHealth} loading={checkingAllIPHealth} disabled={filteredList.length === 0}>检测IP健康</Button>
+            <Button size="sm" variant="secondary" onClick={handleTestAll} loading={testingAll} disabled={filteredList.length === 0}>测试全部</Button>
+            <Button size="sm" onClick={() => setImportModalOpen(true)}>导入代理</Button>
+          </div>
         </div>
       </div>
 

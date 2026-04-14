@@ -81,7 +81,7 @@ export function ProfilePage() {
   ].filter((item) => item.label.trim())
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 animate-fade-in">
+    <div className="mx-auto max-w-5xl space-y-6 animate-fade-in pt-5">
       <Card padding="lg" className="rounded-[26px]">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start">

@@ -52,14 +52,16 @@ export function BrowserCopyPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">配置复制</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">基于现有配置快速创建</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={() => navigate('/browser/list')}>返回列表</Button>
-          <Button size="sm" onClick={handleCopy} loading={saving}>生成配置</Button>
+      <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-5 px-5 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">配置复制</h1>
+            <p className="text-sm text-[var(--color-text-muted)] mt-1">基于现有配置快速创建</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => navigate('/browser/list')}>返回列表</Button>
+            <Button size="sm" onClick={handleCopy} loading={saving}>生成配置</Button>
+          </div>
         </div>
       </div>
 

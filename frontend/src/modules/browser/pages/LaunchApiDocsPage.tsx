@@ -1591,7 +1591,7 @@ export function LaunchApiDocsPage() {
   const renderedContent = renderDocWithLaunchContext(activeContent, launchBaseUrl, apiAuth.header)
 
   return (
-    <div className="flex h-full -m-5 overflow-hidden">
+    <div className="flex h-full -mx-5 -mb-5 overflow-hidden">
       <aside className="w-52 shrink-0 border-r border-[var(--color-border-default)] bg-[var(--color-bg-surface)] flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b border-[var(--color-border-muted)]">
           <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-widest">文档</p>

@@ -9,9 +9,11 @@ import {
 export function ChartsPage() {
   return (
     <div className="p-6 space-y-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">图表案例展示</h1>
-        <p className="text-[var(--color-text-secondary)]">以下展示了多种美观的数据可视化图表案例</p>
+      <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-6 px-6 py-3">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">图表案例展示</h1>
+          <p className="text-[var(--color-text-secondary)]">以下展示了多种美观的数据可视化图表案例</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

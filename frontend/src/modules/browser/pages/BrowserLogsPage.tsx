@@ -88,18 +88,20 @@ export function BrowserLogsPage() {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">日志查看</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">应用运行日志，每 3 秒自动刷新</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={load} loading={loading}>
-            <RefreshCw className="w-4 h-4" />刷新
-          </Button>
-          <Button variant="secondary" size="sm" onClick={handleClear}>
-            <Trash2 className="w-4 h-4" />清空
-          </Button>
+      <div className="sticky top-0 z-10 bg-[var(--color-bg-base)] -mx-5 px-5 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">日志查看</h1>
+            <p className="text-sm text-[var(--color-text-muted)] mt-1">应用运行日志，每 3 秒自动刷新</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={load} loading={loading}>
+              <RefreshCw className="w-4 h-4" />刷新
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleClear}>
+              <Trash2 className="w-4 h-4" />清空
+            </Button>
+          </div>
         </div>
       </div>
 
