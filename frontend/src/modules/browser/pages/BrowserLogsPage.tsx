@@ -156,7 +156,7 @@ export function BrowserLogsPage() {
             <div className="py-16 text-center text-sm text-[var(--color-text-muted)]">暂无日志</div>
           ) : (
             <table className="min-w-full">
-              <thead className="sticky top-0 z-10 bg-[var(--color-bg-muted)]">
+              <thead className="sticky top-0 z-[5] bg-[var(--color-bg-muted)]">
                 <tr>
                   <th className="px-3 py-2 text-left text-[var(--color-text-muted)] font-semibold w-40">时间</th>
                   <th className="px-3 py-2 text-left text-[var(--color-text-muted)] font-semibold w-16">级别</th>

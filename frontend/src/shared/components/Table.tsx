@@ -104,7 +104,7 @@ export function Table<T extends Record<string, any>>({
       style={{ maxHeight }}
     >
       <table className="min-w-full">
-        <thead className={clsx(stickyHeader && 'sticky top-0 z-10')}>
+        <thead className={clsx(stickyHeader && 'sticky top-0 z-[5]')}>
           <tr>
             {columns.map((col) => (
               <th

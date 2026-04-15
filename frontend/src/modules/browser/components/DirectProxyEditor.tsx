@@ -103,7 +103,7 @@ export function DirectProxyEditor({
           <Input
             value={form.username}
             onChange={e => onFormChange(prev => ({ ...prev, username: e.target.value }))}
-            placeholder="留空则不使用认证"
+            placeholder="留空则不使用认证，支持 {profileName} 占位符"
             disabled={readOnly}
           />
         </FormItem>
@@ -113,7 +113,7 @@ export function DirectProxyEditor({
               type={showPassword ? 'text' : 'password'}
               value={form.password}
               onChange={e => onFormChange(prev => ({ ...prev, password: e.target.value }))}
-              placeholder="留空则不使用密码"
+              placeholder="留空则不使用密码，支持 {profileName} 占位符"
               disabled={readOnly}
               className="pr-9"
             />

@@ -2052,6 +2052,7 @@ export function ProxyPoolPage() {
                       columns={columns}
                       data={group.proxies}
                       rowKey="proxyId"
+                      maxHeight="none"
                       sortColumn={sortColumn}
                       sortOrder={sortOrder}
                       onSort={({ column, order }) => {

@@ -46,23 +46,44 @@ function normalizeDirectProxyConfig(raw: string): string {
   return trimmed
 }
 
+function containsPlaceholder(s: string): boolean {
+  return /\{[a-zA-Z]+\}/.test(s)
+}
+
 /**
  * Build a normalized proxy URL string from direct form fields.
  * Throws an Error with a user-friendly Chinese message if validation fails.
+ * Supports {profileName} placeholders — when detected, skips strict URL validation.
  */
 export function buildDirectProxyConfig(form: DirectProxyForm): string {
   const serverInput = form.server.trim()
   if (!serverInput) {
     throw new Error('请输入代理地址')
   }
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(serverInput)) {
-    throw new Error('代理地址只需要填写主机名或 IP，不需要协议头')
-  }
 
   const portInput = form.port.trim()
   if (!portInput) {
     throw new Error('请输入代理端口')
   }
+
+  const username = form.username.trim()
+  const password = form.password
+
+  const hasPlaceholder = [serverInput, portInput, username, password].some(containsPlaceholder)
+
+  if (hasPlaceholder) {
+    // When placeholders are present, skip strict validation and build raw config.
+    // Placeholders will be resolved at copy/create time by the backend.
+    const auth = username
+      ? `${encodeURIComponent(username)}${password ? `:${encodeURIComponent(password)}` : ''}@`
+      : ''
+    return `${form.protocol}://${auth}${formatDirectProxyHost(serverInput)}:${portInput}`
+  }
+
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(serverInput)) {
+    throw new Error('代理地址只需要填写主机名或 IP，不需要协议头')
+  }
+
   if (!/^\d+$/.test(portInput)) {
     throw new Error('代理端口必须为数字')
   }
@@ -72,8 +93,6 @@ export function buildDirectProxyConfig(form: DirectProxyForm): string {
     throw new Error('代理端口必须在 1-65535 之间')
   }
 
-  const username = form.username.trim()
-  const password = form.password
   if (password && !username) {
     throw new Error('填写密码时请同时填写账号')
   }

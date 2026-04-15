@@ -3,6 +3,7 @@ package browser
 import (
 	"ant-chrome/backend/internal/logger"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"sort"
 	"strings"
@@ -212,6 +213,15 @@ func (m *Manager) GetAllTags() []string {
 	return tags
 }
 
+// replacePlaceholders 替换代理配置中的占位符，如 {profileName}
+func replacePlaceholders(s string, profileName string) string {
+	// URL 编码形式（前端 encodeURIComponent 产生 %7B / %7D）
+	s = strings.ReplaceAll(s, "%7BprofileName%7D", url.QueryEscape(profileName))
+	// 原始形式
+	s = strings.ReplaceAll(s, "{profileName}", profileName)
+	return s
+}
+
 // Create 创建配置
 func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 	log := logger.New("Browser")
@@ -252,6 +262,7 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 	if proxyConfig == "" && m.Config.Browser.DefaultProxy != "" {
 		proxyConfig = m.Config.Browser.DefaultProxy
 	}
+	proxyConfig = replacePlaceholders(proxyConfig, input.ProfileName)
 	profile := &Profile{
 		ProfileId:       profileId,
 		ProfileName:     input.ProfileName,
@@ -436,7 +447,7 @@ func (m *Manager) Copy(profileId string, newName string) (*Profile, error) {
 		CoreId:             normalizeProfileCoreID(src.CoreId),
 		FingerprintArgs:    append([]string{}, m.Config.Browser.DefaultFingerprintArgs...), // 使用默认指纹（新种子）
 		ProxyId:            src.ProxyId,
-		ProxyConfig:        src.ProxyConfig,
+		ProxyConfig:        replacePlaceholders(src.ProxyConfig, profileName),
 		ProxyBindSourceID:  src.ProxyBindSourceID,
 		ProxyBindSourceURL: src.ProxyBindSourceURL,
 		ProxyBindName:      src.ProxyBindName,

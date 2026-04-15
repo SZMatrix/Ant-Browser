@@ -359,7 +359,7 @@ export function TagManagementPage() {
         <Card padding="none" className="flex-1 overflow-hidden">
           <div className="overflow-auto h-full">
             <table className="min-w-full">
-              <thead className="sticky top-0 z-10">
+              <thead className="sticky top-0 z-[5]">
                 <tr>
                   <th className="px-4 py-3 bg-[var(--color-bg-muted)] w-10">
                     <input
