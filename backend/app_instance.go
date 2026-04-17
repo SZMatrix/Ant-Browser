@@ -247,6 +247,9 @@ func (a *App) browserInstanceStartInternal(profileId string, extraLaunchArgs []s
 		args = append(args, fmt.Sprintf("--proxy-server=%s", effectiveProxy))
 	}
 	args = append(args, profile.FingerprintArgs...)
+	if extPaths := a.resolveExtensionsForProfile(profile); len(extPaths) > 0 {
+		args = append(args, buildLoadExtensionArg(extPaths))
+	}
 	args = append(args, sanitizedProfileLaunchArgs...)
 	args = append(args, sanitizedExtraLaunchArgs...)
 	args = appendLaunchTargets(args, profile, normalizedStartURLs, skipDefaultStartURLs)

@@ -5,6 +5,7 @@ import (
 	"ant-chrome/backend/internal/browser"
 	"ant-chrome/backend/internal/config"
 	"ant-chrome/backend/internal/database"
+	"ant-chrome/backend/internal/extension"
 	"ant-chrome/backend/internal/launchcode"
 	"ant-chrome/backend/internal/logger"
 	"ant-chrome/backend/internal/proxy"
@@ -45,6 +46,7 @@ type App struct {
 	launchCodeSvc  *launchcode.LaunchCodeService
 	launchServer   *launchcode.LaunchServer
 	speedScheduler *browser.ProxySpeedScheduler
+	extMgr         *extension.Manager
 	appRoot        string
 	version        string
 
@@ -175,6 +177,15 @@ func (a *App) startup(ctx context.Context) {
 	a.browserMgr.CoreDAO = browser.NewSQLiteCoreDAO(conn)
 	a.browserMgr.BookmarkDAO = browser.NewSQLiteBookmarkDAO(conn)
 	a.browserMgr.GroupDAO = browser.NewSQLiteGroupDAO(conn)
+
+	// Extension subsystem
+	extPaths := extension.NewPaths(a.resolveAppPath("data"))
+	extStore := extension.NewSQLiteStore(conn)
+	extInstaller := extension.NewInstaller(extPaths)
+	if err := extInstaller.RecoverOnBoot(); err != nil {
+		logger.New("Extension").Error("extension recover on boot failed", logger.F("error", err))
+	}
+	a.extMgr = extension.NewManager(extStore, extInstaller, extension.NewPendingRestartTracker(), extPaths)
 
 	// 一次性迁移：若 SQLite 表为空则从旧文件导入
 	a.migrateToSQLite()
@@ -561,7 +572,19 @@ func (a *App) BrowserProfileUpdate(profileId string, input BrowserProfileInput) 
 	return a.browserMgr.Update(profileId, input)
 }
 
-func (a *App) BrowserProfileDelete(profileId string) error { return a.browserMgr.Delete(profileId) }
+func (a *App) BrowserProfileDelete(profileId string) error {
+	if err := a.browserMgr.Delete(profileId); err != nil {
+		return err
+	}
+	if a.extMgr != nil {
+		if err := a.extMgr.Store.PruneProfileFromAllScopes(profileId); err != nil {
+			logger.New("Browser").Warn("扩展 scope 级联清理失败（已由规范化层兜底）",
+				logger.F("profile_id", profileId), logger.F("error", err))
+		}
+		a.extMgr.Tracker.ClearProfile(profileId)
+	}
+	return nil
+}
 
 // BrowserProfileCopy 复制实例配置（除指纹参数外全部复制）
 func (a *App) BrowserProfileCopy(profileId string, newName string) (*BrowserProfile, error) {

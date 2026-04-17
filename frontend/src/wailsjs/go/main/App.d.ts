@@ -4,6 +4,7 @@ import {backup} from '../models';
 import {config} from '../models';
 import {browser} from '../models';
 import {backend} from '../models';
+import {extension} from '../models';
 import {logger} from '../models';
 import {launchcode} from '../models';
 
@@ -118,6 +119,28 @@ export function ClearAppLogs():Promise<void>;
 export function CreateGroup(arg1:browser.GroupInput):Promise<browser.Group>;
 
 export function DeleteGroup(arg1:string):Promise<void>;
+
+export function ExtensionCancelPreview(arg1:string):Promise<void>;
+
+export function ExtensionCommit(arg1:string,arg2:extension.Scope,arg3:string,arg4:string):Promise<extension.ExtensionView>;
+
+export function ExtensionDelete(arg1:string):Promise<extension.ExtensionChangeResult>;
+
+export function ExtensionGet(arg1:string):Promise<extension.ExtensionView>;
+
+export function ExtensionGetPendingRestarts():Promise<Record<string, Array<string>>>;
+
+export function ExtensionList():Promise<Array<extension.ExtensionView>>;
+
+export function ExtensionPreviewFromLocal(arg1:string):Promise<extension.ExtensionPreview>;
+
+export function ExtensionPreviewFromStore(arg1:string):Promise<extension.ExtensionPreview>;
+
+export function ExtensionRename(arg1:string,arg2:string):Promise<void>;
+
+export function ExtensionSetEnabled(arg1:string,arg2:boolean):Promise<extension.ExtensionChangeResult>;
+
+export function ExtensionUpdateScope(arg1:string,arg2:extension.Scope):Promise<extension.ExtensionChangeResult>;
 
 export function FetchRemoteAuthorProfile(arg1:string,arg2:number):Promise<Record<string, any>>;
 

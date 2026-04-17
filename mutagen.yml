@@ -8,7 +8,6 @@ sync:
         - ".history"
         - ".kiro"
         - ".windsurfrules"
-        - "docs"
         - "images/readme"
         - "bin"
         - "build/bin"

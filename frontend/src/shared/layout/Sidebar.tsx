@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Layers,
   PieChart,
+  Puzzle,
   Cpu,
   Globe,
   Tag,
@@ -39,6 +40,7 @@ const iconMap: Record<string, LucideIcon> = {
   Globe,
   Bookmark,
   BookOpen,
+  Puzzle,
   Tag,
 }
 

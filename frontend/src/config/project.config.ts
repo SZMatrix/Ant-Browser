@@ -43,6 +43,12 @@ export const navigationConfig: NavSection[] = [
     ]
   },
   {
+    title: '效率',
+    items: [
+      { name: '扩展', path: '/efficiency/extensions', icon: 'Puzzle' },
+    ]
+  },
+  {
     title: '系统维护',
     items: [
       { name: '系统设置', path: '/settings', icon: 'Settings' },

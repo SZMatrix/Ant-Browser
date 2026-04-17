@@ -1377,19 +1377,8 @@ export function ProxyPoolPage() {
       title: '操作',
       width: '320px',
       render: (_, record) => {
-        const hasSource = !!record.sourceId && !!record.sourceUrl
         return (
           <div className="flex gap-2">
-            {hasSource && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={(e) => { e.stopPropagation(); void refreshSingleSource(record.sourceId, false) }}
-                loading={refreshingSourceIds.has(record.sourceId)}
-              >
-                刷新订阅
-              </Button>
-            )}
             <Button
               size="sm" variant="ghost"
               onClick={(e) => { e.stopPropagation(); handleTestOne(record) }}

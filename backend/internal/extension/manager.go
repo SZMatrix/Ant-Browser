@@ -1,0 +1,93 @@
+package extension
+
+import (
+	"encoding/base64"
+	"net/http"
+	"os"
+	"path/filepath"
+)
+
+// Manager wires Store + Installer + Tracker and resolves ExtensionView data
+// for the API layer. The CDP client factory is deferred to Phase 3 and lives
+// outside this struct so this package stays free of CDP imports for now.
+type Manager struct {
+	Store     *SQLiteStore
+	Installer *Installer
+	Tracker   *PendingRestartTracker
+	Paths     Paths
+}
+
+func NewManager(store *SQLiteStore, inst *Installer, tracker *PendingRestartTracker, paths Paths) *Manager {
+	return &Manager{Store: store, Installer: inst, Tracker: tracker, Paths: paths}
+}
+
+// ListEnabled returns all enabled extensions. Used by launch integration.
+func (m *Manager) ListEnabled() []*Extension {
+	xs, _ := m.Store.ListEnabled()
+	return xs
+}
+
+// BuildView assembles an ExtensionView from a stored extension plus live state.
+// validGroupIDs and validProfileIDs are used to compute StaleScopeIDs.
+func (m *Manager) BuildView(ext *Extension, validGroupIDs, validProfileIDs map[string]struct{}) *ExtensionView {
+	iconDataURL := ""
+	if ext.IconPath != "" {
+		p := filepath.Join(m.Paths.ExtensionDir(ext.ExtensionID), ext.IconPath)
+		if b, err := os.ReadFile(p); err == nil {
+			// Sniff content: Stage() always writes to icon.png regardless of the
+			// source icon's real format (JPEG/SVG/PNG), so the filename is not
+			// authoritative for mime.
+			mime := http.DetectContentType(b)
+			iconDataURL = "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(b)
+		}
+	}
+	// Always emit non-nil slices so the frontend (which types these as arrays)
+	// can safely call .length without JSON nulls crashing the card renderer.
+	pending := m.Tracker.ForExtension(ext.ExtensionID)
+	if pending == nil {
+		pending = []string{}
+	}
+	stale := staleIDs(ext.Scope, validGroupIDs, validProfileIDs)
+	if stale == nil {
+		stale = []string{}
+	}
+	scope := ext.Scope
+	if scope.IDs == nil {
+		scope.IDs = []string{}
+	}
+	return &ExtensionView{
+		ExtensionID:              ext.ExtensionID,
+		ChromeID:                 ext.ChromeID,
+		Name:                     ext.Name,
+		Provider:                 ext.Provider,
+		Description:              ext.Description,
+		Version:                  ext.Version,
+		SourceType:               ext.SourceType,
+		StoreVendor:              ext.StoreVendor,
+		SourceURL:                ext.SourceURL,
+		Enabled:                  ext.Enabled,
+		Scope:                    scope,
+		IconDataURL:              iconDataURL,
+		PendingRestartProfileIDs: pending,
+		StaleScopeIDs:            stale,
+	}
+}
+
+func staleIDs(sc Scope, validGroupIDs, validProfileIDs map[string]struct{}) []string {
+	var ref map[string]struct{}
+	switch sc.Kind {
+	case ScopeKindGroups:
+		ref = validGroupIDs
+	case ScopeKindInstances:
+		ref = validProfileIDs
+	default:
+		return nil
+	}
+	var out []string
+	for _, id := range sc.IDs {
+		if _, ok := ref[id]; !ok {
+			out = append(out, id)
+		}
+	}
+	return out
+}

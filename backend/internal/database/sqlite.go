@@ -135,6 +135,31 @@ var migrations = []migration{
 			`ALTER TABLE browser_profiles ADD COLUMN proxy_bind_updated_at TEXT NOT NULL DEFAULT ''`,
 		},
 	},
+	{
+		version: 7,
+		desc:    "添加扩展表",
+		stmts: []string{
+			`CREATE TABLE IF NOT EXISTS extensions (
+				extension_id      TEXT PRIMARY KEY,
+				chrome_id         TEXT NOT NULL DEFAULT '',
+				name              TEXT NOT NULL,
+				provider          TEXT NOT NULL DEFAULT '',
+				description       TEXT NOT NULL DEFAULT '',
+				version           TEXT NOT NULL DEFAULT '',
+				icon_path         TEXT NOT NULL DEFAULT '',
+				unpacked_path     TEXT NOT NULL DEFAULT '',
+				source_type       TEXT NOT NULL,
+				store_vendor      TEXT NOT NULL DEFAULT '',
+				source_url        TEXT NOT NULL DEFAULT '',
+				enabled           INTEGER NOT NULL DEFAULT 1,
+				scope_json        TEXT NOT NULL DEFAULT '{"kind":"instances","ids":[]}',
+				created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_extensions_enabled ON extensions(enabled)`,
+			`CREATE INDEX IF NOT EXISTS idx_extensions_chrome_id ON extensions(chrome_id)`,
+		},
+	},
 	// ── 新版本在此追加，格式：
 	// {
 	//     version: 4,

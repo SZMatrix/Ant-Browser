@@ -226,6 +226,50 @@ export function DeleteGroup(arg1) {
   return window['go']['main']['App']['DeleteGroup'](arg1);
 }
 
+export function ExtensionCancelPreview(arg1) {
+  return window['go']['main']['App']['ExtensionCancelPreview'](arg1);
+}
+
+export function ExtensionCommit(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ExtensionCommit'](arg1, arg2, arg3, arg4);
+}
+
+export function ExtensionDelete(arg1) {
+  return window['go']['main']['App']['ExtensionDelete'](arg1);
+}
+
+export function ExtensionGet(arg1) {
+  return window['go']['main']['App']['ExtensionGet'](arg1);
+}
+
+export function ExtensionGetPendingRestarts() {
+  return window['go']['main']['App']['ExtensionGetPendingRestarts']();
+}
+
+export function ExtensionList() {
+  return window['go']['main']['App']['ExtensionList']();
+}
+
+export function ExtensionPreviewFromLocal(arg1) {
+  return window['go']['main']['App']['ExtensionPreviewFromLocal'](arg1);
+}
+
+export function ExtensionPreviewFromStore(arg1) {
+  return window['go']['main']['App']['ExtensionPreviewFromStore'](arg1);
+}
+
+export function ExtensionRename(arg1, arg2) {
+  return window['go']['main']['App']['ExtensionRename'](arg1, arg2);
+}
+
+export function ExtensionSetEnabled(arg1, arg2) {
+  return window['go']['main']['App']['ExtensionSetEnabled'](arg1, arg2);
+}
+
+export function ExtensionUpdateScope(arg1, arg2) {
+  return window['go']['main']['App']['ExtensionUpdateScope'](arg1, arg2);
+}
+
 export function FetchRemoteAuthorProfile(arg1, arg2) {
   return window['go']['main']['App']['FetchRemoteAuthorProfile'](arg1, arg2);
 }

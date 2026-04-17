@@ -606,6 +606,154 @@ export namespace config {
 
 }
 
+export namespace extension {
+	
+	export class Scope {
+	    kind: string;
+	    ids: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Scope(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.ids = source["ids"];
+	    }
+	}
+	export class ExtensionView {
+	    extensionId: string;
+	    chromeId: string;
+	    name: string;
+	    provider: string;
+	    description: string;
+	    version: string;
+	    sourceType: string;
+	    storeVendor: string;
+	    sourceUrl: string;
+	    enabled: boolean;
+	    scope: Scope;
+	    iconDataURL: string;
+	    pendingRestartProfileIds: string[];
+	    staleScopeIds: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ExtensionView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.extensionId = source["extensionId"];
+	        this.chromeId = source["chromeId"];
+	        this.name = source["name"];
+	        this.provider = source["provider"];
+	        this.description = source["description"];
+	        this.version = source["version"];
+	        this.sourceType = source["sourceType"];
+	        this.storeVendor = source["storeVendor"];
+	        this.sourceUrl = source["sourceUrl"];
+	        this.enabled = source["enabled"];
+	        this.scope = this.convertValues(source["scope"], Scope);
+	        this.iconDataURL = source["iconDataURL"];
+	        this.pendingRestartProfileIds = source["pendingRestartProfileIds"];
+	        this.staleScopeIds = source["staleScopeIds"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ExtensionChangeResult {
+	    extension?: ExtensionView;
+	    affectedProfileIds: string[];
+	    cdpSucceededIds: string[];
+	    pendingRestartIds: string[];
+	    notRunningIds: string[];
+	    cdpSupportedByKernel: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExtensionChangeResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.extension = this.convertValues(source["extension"], ExtensionView);
+	        this.affectedProfileIds = source["affectedProfileIds"];
+	        this.cdpSucceededIds = source["cdpSucceededIds"];
+	        this.pendingRestartIds = source["pendingRestartIds"];
+	        this.notRunningIds = source["notRunningIds"];
+	        this.cdpSupportedByKernel = source["cdpSupportedByKernel"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ExtensionPreview {
+	    stagingToken: string;
+	    chromeId: string;
+	    name: string;
+	    provider: string;
+	    description: string;
+	    version: string;
+	    sourceType: string;
+	    storeVendor: string;
+	    sourceUrl: string;
+	    iconDataURL: string;
+	    duplicateOf: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExtensionPreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.stagingToken = source["stagingToken"];
+	        this.chromeId = source["chromeId"];
+	        this.name = source["name"];
+	        this.provider = source["provider"];
+	        this.description = source["description"];
+	        this.version = source["version"];
+	        this.sourceType = source["sourceType"];
+	        this.storeVendor = source["storeVendor"];
+	        this.sourceUrl = source["sourceUrl"];
+	        this.iconDataURL = source["iconDataURL"];
+	        this.duplicateOf = source["duplicateOf"];
+	    }
+	}
+	
+
+}
+
 export namespace launchcode {
 	
 	export class LaunchRequestParams {

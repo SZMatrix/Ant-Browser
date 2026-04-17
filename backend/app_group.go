@@ -89,10 +89,14 @@ func (a *App) DeleteGroup(groupId string) error {
 	if a.browserMgr.GroupDAO == nil {
 		return fmt.Errorf("GroupDAO 未初始化")
 	}
-
 	if err := a.browserMgr.GroupDAO.Delete(groupId); err != nil {
 		log.Error("删除分组失败", logger.F("group_id", groupId), logger.F("error", err))
 		return err
+	}
+	if a.extMgr != nil {
+		if err := a.extMgr.Store.PruneGroupFromAllScopes(groupId); err != nil {
+			log.Warn("扩展 scope 级联清理失败（已由规范化层兜底）", logger.F("group_id", groupId), logger.F("error", err))
+		}
 	}
 	log.Info("分组已删除", logger.F("group_id", groupId))
 	return nil
