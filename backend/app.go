@@ -187,6 +187,14 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.extMgr = extension.NewManager(extStore, extInstaller, extension.NewPendingRestartTracker(), extPaths)
 
+	// Flip any rows stuck in 'installing' from a previous run to 'failed'.
+	if stuck, sErr := a.extMgr.Store.ListInstalling(); sErr == nil {
+		for _, ext := range stuck {
+			_ = a.extMgr.Store.UpdateInstallStatus(ext.ExtensionID, extension.InstallStatusFailed, "应用重启中断，请点击重试")
+		}
+	}
+	a.extMgr.Worker = extension.NewInstallWorker(a.extMgr.Store, a.extMgr.Paths, extension.DefaultEmitter(a.ctx))
+
 	// 一次性迁移：若 SQLite 表为空则从旧文件导入
 	a.migrateToSQLite()
 
@@ -559,10 +567,6 @@ func (a *App) BrowserGetAllTags() []string {
 	return a.browserMgr.GetAllTags()
 }
 
-// BrowserProfileSetKeywords 设置实例关键字
-func (a *App) BrowserProfileSetKeywords(profileId string, keywords []string) (*BrowserProfile, error) {
-	return a.browserMgr.SetKeywords(profileId, keywords)
-}
 
 func (a *App) BrowserProfileCreate(input BrowserProfileInput) (*BrowserProfile, error) {
 	return a.browserMgr.Create(input)
@@ -1380,7 +1384,6 @@ func (a *App) migrateToSQLite() {
 					ProxyBindUpdatedAt: pc.ProxyBindUpdatedAt,
 					LaunchArgs:         pc.LaunchArgs,
 					Tags:               pc.Tags,
-					Keywords:           pc.Keywords,
 					CreatedAt:          pc.CreatedAt,
 					UpdatedAt:          pc.UpdatedAt,
 				}

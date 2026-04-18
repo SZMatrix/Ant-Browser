@@ -48,7 +48,6 @@ var migrations = []migration{
 				proxy_config     TEXT NOT NULL DEFAULT '',
 				launch_args      TEXT NOT NULL DEFAULT '[]',
 				tags             TEXT NOT NULL DEFAULT '[]',
-				keywords         TEXT NOT NULL DEFAULT '[]',
 				created_at       DATETIME NOT NULL,
 				updated_at       DATETIME NOT NULL
 			)`,
@@ -160,6 +159,22 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_extensions_chrome_id ON extensions(chrome_id)`,
 		},
 	},
+	{
+		version: 8,
+		desc:    "移除实例 keywords 字段",
+		stmts: []string{
+			`ALTER TABLE browser_profiles DROP COLUMN keywords`,
+		},
+	},
+	{
+		version: 9,
+		desc:    "扩展表添加安装状态字段",
+		stmts: []string{
+			`ALTER TABLE extensions ADD COLUMN install_status TEXT NOT NULL DEFAULT 'succeeded'`,
+			`ALTER TABLE extensions ADD COLUMN install_error TEXT NOT NULL DEFAULT ''`,
+			`CREATE INDEX IF NOT EXISTS idx_extensions_install_status ON extensions(install_status)`,
+		},
+	},
 	// ── 新版本在此追加，格式：
 	// {
 	//     version: 4,
@@ -254,8 +269,8 @@ func (db *DB) applyMigration(m migration) error {
 
 	for _, stmt := range m.stmts {
 		if _, err := tx.Exec(stmt); err != nil {
-			// ALTER TABLE 添加已存在列时忽略（兼容从旧版本直接升级的情况）
-			if isColumnExistsError(err) {
+			// ALTER TABLE 添加已存在列 或 DROP 已缺失列 时忽略（兼容从旧版本直接升级的情况）
+			if isColumnExistsError(err, stmt) {
 				continue
 			}
 			return fmt.Errorf("执行语句失败 [%s]: %w", truncate(stmt, 60), err)
@@ -273,13 +288,21 @@ func (db *DB) applyMigration(m migration) error {
 	return tx.Commit()
 }
 
-// isColumnExistsError 检查是否是列已存在的错误（SQLite 错误信息）
-func isColumnExistsError(err error) bool {
+// isColumnExistsError 检查是否是列已存在/已缺失的错误（SQLite 错误信息）。
+// "no such column" 只有在 DROP COLUMN 语句里才当作幂等情况，避免掩盖其它未来迁移里引用错误列名导致的真实 bug。
+func isColumnExistsError(err error, stmt string) bool {
 	if err == nil {
 		return false
 	}
 	s := err.Error()
-	return strings.Contains(s, "duplicate column") || strings.Contains(s, "already exists")
+	if strings.Contains(s, "duplicate column") || strings.Contains(s, "already exists") {
+		return true
+	}
+	if strings.Contains(s, "no such column") {
+		upper := strings.ToUpper(stmt)
+		return strings.Contains(upper, "DROP COLUMN")
+	}
+	return false
 }
 
 // truncate 截断字符串用于日志展示

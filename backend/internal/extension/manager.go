@@ -15,6 +15,7 @@ type Manager struct {
 	Installer *Installer
 	Tracker   *PendingRestartTracker
 	Paths     Paths
+	Worker    *InstallWorker // attached after Wails context is ready; nil until then
 }
 
 func NewManager(store *SQLiteStore, inst *Installer, tracker *PendingRestartTracker, paths Paths) *Manager {
@@ -70,6 +71,8 @@ func (m *Manager) BuildView(ext *Extension, validGroupIDs, validProfileIDs map[s
 		IconDataURL:              iconDataURL,
 		PendingRestartProfileIDs: pending,
 		StaleScopeIDs:            stale,
+		InstallStatus:            ext.InstallStatus,
+		InstallError:             ext.InstallError,
 	}
 }
 

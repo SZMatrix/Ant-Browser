@@ -12,7 +12,6 @@ export interface BrowserProfile {
   proxyBindUpdatedAt?: string
   launchArgs: string[]
   tags: string[]
-  keywords: string[]
   groupId?: string
   running: boolean
   debugPort: number
@@ -36,7 +35,6 @@ export interface BrowserProfileInput {
   proxyConfig: string
   launchArgs: string[]
   tags: string[]
-  keywords: string[]
   groupId?: string
 }
 

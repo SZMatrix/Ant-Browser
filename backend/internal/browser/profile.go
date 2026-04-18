@@ -90,7 +90,6 @@ func (m *Manager) loadProfiles() {
 			ProxyBindUpdatedAt: item.ProxyBindUpdatedAt,
 			LaunchArgs:         append([]string{}, item.LaunchArgs...),
 			Tags:               append([]string{}, item.Tags...),
-			Keywords:           append([]string{}, item.Keywords...),
 			Running:            false,
 			DebugPort:          0,
 			Pid:                0,
@@ -134,7 +133,6 @@ func (m *Manager) SaveProfiles() error {
 			ProxyBindUpdatedAt: profile.ProxyBindUpdatedAt,
 			LaunchArgs:         append([]string{}, profile.LaunchArgs...),
 			Tags:               append([]string{}, profile.Tags...),
-			Keywords:           append([]string{}, profile.Keywords...),
 			CreatedAt:          profile.CreatedAt,
 			UpdatedAt:          profile.UpdatedAt,
 		})
@@ -273,7 +271,6 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 		ProxyConfig:     proxyConfig,
 		LaunchArgs:      input.LaunchArgs,
 		Tags:            input.Tags,
-		Keywords:        append([]string{}, input.Keywords...),
 		GroupId:         strings.TrimSpace(input.GroupId),
 		Running:         false,
 		DebugPort:       0,
@@ -326,7 +323,6 @@ func (m *Manager) Update(profileId string, input ProfileInput) (*Profile, error)
 	}
 	profile.LaunchArgs = input.LaunchArgs
 	profile.Tags = input.Tags
-	profile.Keywords = append([]string{}, input.Keywords...)
 	profile.GroupId = strings.TrimSpace(input.GroupId)
 	profile.UpdatedAt = time.Now().Format(time.RFC3339)
 	log.Info("浏览器配置更新", logger.F("profile_id", profileId), logger.F("profile_name", input.ProfileName))
@@ -454,7 +450,6 @@ func (m *Manager) Copy(profileId string, newName string) (*Profile, error) {
 		ProxyBindUpdatedAt: src.ProxyBindUpdatedAt,
 		LaunchArgs:         append([]string{}, src.LaunchArgs...),
 		Tags:               append([]string{}, src.Tags...),
-		Keywords:           append([]string{}, src.Keywords...),
 		GroupId:            src.GroupId, // 复制分组
 		Running:            false,
 		DebugPort:          0,
@@ -480,33 +475,3 @@ func (m *Manager) Copy(profileId string, newName string) (*Profile, error) {
 	return profile, nil
 }
 
-// SetKeywords 设置实例关键字（独立接口，不影响其他字段）
-func (m *Manager) SetKeywords(profileId string, keywords []string) (*Profile, error) {
-	log := logger.New("Browser")
-	m.InitData()
-	m.Mutex.Lock()
-	defer m.Mutex.Unlock()
-	profile, exists := m.Profiles[profileId]
-	if !exists {
-		return nil, fmt.Errorf("profile not found")
-	}
-	profile.Keywords = append([]string{}, keywords...)
-	profile.UpdatedAt = time.Now().Format(time.RFC3339)
-	log.Info("关键字更新", logger.F("profile_id", profileId))
-	if err := m.SaveProfiles(); err != nil {
-		return nil, err
-	}
-	return profile, nil
-}
-
-// copyKeywords 深拷贝 keywords map
-func copyKeywords(src map[string]string) map[string]string {
-	if src == nil {
-		return nil
-	}
-	dst := make(map[string]string, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
-	return dst
-}

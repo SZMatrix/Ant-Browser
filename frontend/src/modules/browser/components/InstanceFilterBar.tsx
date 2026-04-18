@@ -10,7 +10,6 @@ export interface InstanceFilters {
   proxyId: string
   coreId: string
   tags: Set<string>
-  kwSearch: string
   groupId: string   // '' = 全部, '__ungrouped__' = 未分组, 其他 = 具体分组ID
 }
 
@@ -20,12 +19,11 @@ export const EMPTY_FILTERS: InstanceFilters = {
   proxyId: '',
   coreId: '',
   tags: new Set(),
-  kwSearch: '',
   groupId: '',
 }
 
 export function isFiltersEmpty(f: InstanceFilters) {
-  return !f.keyword && !f.status && !f.proxyId && !f.coreId && f.tags.size === 0 && !f.kwSearch && !f.groupId
+  return !f.keyword && !f.status && !f.proxyId && !f.coreId && f.tags.size === 0 && !f.groupId
 }
 
 interface Props {
@@ -44,7 +42,7 @@ export function InstanceFilterBar({ filters, onChange, proxies, cores, allTags, 
     onChange({ ...filters, [key]: value })
 
   const hasFilter = !isFiltersEmpty(filters)
-  const activeCount = [filters.keyword, filters.status, filters.proxyId, filters.coreId, filters.kwSearch, filters.groupId].filter(Boolean).length + filters.tags.size
+  const activeCount = [filters.keyword, filters.status, filters.proxyId, filters.coreId, filters.groupId].filter(Boolean).length + filters.tags.size
 
   return (
     <div className="space-y-2">
@@ -109,12 +107,6 @@ export function InstanceFilterBar({ filters, onChange, proxies, cores, allTags, 
                 ...groups.map(g => ({ value: g.groupId, label: g.groupName })),
               ]}
               style={{ width: '140px' }}
-            />
-            <Input
-              value={filters.kwSearch}
-              onChange={e => set('kwSearch', e.target.value)}
-              placeholder="搜索关键字值..."
-              className="flex-1 min-w-[160px]"
             />
             {hasFilter && (
               <button

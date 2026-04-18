@@ -84,8 +84,6 @@ export function BrowserProfileRegenerateCode(arg1:string):Promise<string>;
 
 export function BrowserProfileSetCode(arg1:string,arg2:string):Promise<string>;
 
-export function BrowserProfileSetKeywords(arg1:string,arg2:Array<string>):Promise<browser.Profile>;
-
 export function BrowserProfileUpdate(arg1:string,arg2:browser.ProfileInput):Promise<browser.Profile>;
 
 export function BrowserProxyBatchCheckIPHealth(arg1:Array<string>,arg2:number):Promise<Array<backend.ProxyIPHealthResult>>;
@@ -120,9 +118,7 @@ export function CreateGroup(arg1:browser.GroupInput):Promise<browser.Group>;
 
 export function DeleteGroup(arg1:string):Promise<void>;
 
-export function ExtensionCancelPreview(arg1:string):Promise<void>;
-
-export function ExtensionCommit(arg1:string,arg2:extension.Scope,arg3:string,arg4:string):Promise<extension.ExtensionView>;
+export function ExtensionCreateInstalling(arg1:extension.Metadata,arg2:extension.Scope,arg3:string):Promise<extension.ExtensionView>;
 
 export function ExtensionDelete(arg1:string):Promise<extension.ExtensionChangeResult>;
 
@@ -130,13 +126,15 @@ export function ExtensionGet(arg1:string):Promise<extension.ExtensionView>;
 
 export function ExtensionGetPendingRestarts():Promise<Record<string, Array<string>>>;
 
+export function ExtensionIdentifyFromLocal(arg1:string):Promise<extension.Metadata>;
+
+export function ExtensionIdentifyFromStore(arg1:string):Promise<extension.Metadata>;
+
 export function ExtensionList():Promise<Array<extension.ExtensionView>>;
 
-export function ExtensionPreviewFromLocal(arg1:string):Promise<extension.ExtensionPreview>;
-
-export function ExtensionPreviewFromStore(arg1:string):Promise<extension.ExtensionPreview>;
-
 export function ExtensionRename(arg1:string,arg2:string):Promise<void>;
+
+export function ExtensionRetryInstall(arg1:string):Promise<void>;
 
 export function ExtensionSetEnabled(arg1:string,arg2:boolean):Promise<extension.ExtensionChangeResult>;
 

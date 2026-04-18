@@ -406,7 +406,6 @@ export namespace browser {
 	    proxyBindUpdatedAt: string;
 	    launchArgs: string[];
 	    tags: string[];
-	    keywords: string[];
 	    groupId: string;
 	    launchCode: string;
 	    running: boolean;
@@ -439,7 +438,6 @@ export namespace browser {
 	        this.proxyBindUpdatedAt = source["proxyBindUpdatedAt"];
 	        this.launchArgs = source["launchArgs"];
 	        this.tags = source["tags"];
-	        this.keywords = source["keywords"];
 	        this.groupId = source["groupId"];
 	        this.launchCode = source["launchCode"];
 	        this.running = source["running"];
@@ -463,7 +461,6 @@ export namespace browser {
 	    proxyConfig: string;
 	    launchArgs: string[];
 	    tags: string[];
-	    keywords: string[];
 	    groupId: string;
 	
 	    static createFrom(source: any = {}) {
@@ -480,7 +477,6 @@ export namespace browser {
 	        this.proxyConfig = source["proxyConfig"];
 	        this.launchArgs = source["launchArgs"];
 	        this.tags = source["tags"];
-	        this.keywords = source["keywords"];
 	        this.groupId = source["groupId"];
 	    }
 	}
@@ -637,6 +633,8 @@ export namespace extension {
 	    iconDataURL: string;
 	    pendingRestartProfileIds: string[];
 	    staleScopeIds: string[];
+	    installStatus: string;
+	    installError: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ExtensionView(source);
@@ -658,6 +656,8 @@ export namespace extension {
 	        this.iconDataURL = source["iconDataURL"];
 	        this.pendingRestartProfileIds = source["pendingRestartProfileIds"];
 	        this.staleScopeIds = source["staleScopeIds"];
+	        this.installStatus = source["installStatus"];
+	        this.installError = source["installError"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -718,39 +718,37 @@ export namespace extension {
 		    return a;
 		}
 	}
-	export class ExtensionPreview {
-	    stagingToken: string;
+	
+	export class Metadata {
 	    chromeId: string;
 	    name: string;
 	    provider: string;
 	    description: string;
 	    version: string;
+	    iconDataURL: string;
 	    sourceType: string;
 	    storeVendor: string;
 	    sourceUrl: string;
-	    iconDataURL: string;
 	    duplicateOf: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new ExtensionPreview(source);
+	        return new Metadata(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.stagingToken = source["stagingToken"];
 	        this.chromeId = source["chromeId"];
 	        this.name = source["name"];
 	        this.provider = source["provider"];
 	        this.description = source["description"];
 	        this.version = source["version"];
+	        this.iconDataURL = source["iconDataURL"];
 	        this.sourceType = source["sourceType"];
 	        this.storeVendor = source["storeVendor"];
 	        this.sourceUrl = source["sourceUrl"];
-	        this.iconDataURL = source["iconDataURL"];
 	        this.duplicateOf = source["duplicateOf"];
 	    }
 	}
-	
 
 }
 

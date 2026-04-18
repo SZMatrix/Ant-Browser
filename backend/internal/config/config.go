@@ -187,7 +187,6 @@ type BrowserProfileConfig struct {
 	ProxyBindUpdatedAt string   `yaml:"proxy_bind_updated_at,omitempty" json:"proxyBindUpdatedAt,omitempty"`
 	LaunchArgs         []string `yaml:"launch_args" json:"launchArgs"`
 	Tags               []string `yaml:"tags" json:"tags"`
-	Keywords           []string `yaml:"keywords,omitempty" json:"keywords,omitempty"`
 	CreatedAt          string   `yaml:"created_at" json:"createdAt"`
 	UpdatedAt          string   `yaml:"updated_at" json:"updatedAt"`
 }

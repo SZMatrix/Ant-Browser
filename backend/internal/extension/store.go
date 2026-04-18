@@ -25,15 +25,19 @@ func (s *SQLiteStore) Insert(ext *Extension) error {
 		ext.CreatedAt = now
 	}
 	ext.UpdatedAt = now
+	if ext.InstallStatus == "" {
+		ext.InstallStatus = InstallStatusSucceeded
+	}
 	_, err = s.db.Exec(`
 		INSERT INTO extensions (
 			extension_id, chrome_id, name, provider, description, version,
 			icon_path, unpacked_path, source_type, store_vendor, source_url,
-			enabled, scope_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			enabled, scope_json, install_status, install_error, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ext.ExtensionID, ext.ChromeID, ext.Name, ext.Provider, ext.Description, ext.Version,
 		ext.IconPath, ext.UnpackedPath, string(ext.SourceType), string(ext.StoreVendor), ext.SourceURL,
-		boolToInt(ext.Enabled), string(scopeJSON), ext.CreatedAt, ext.UpdatedAt,
+		boolToInt(ext.Enabled), string(scopeJSON), string(ext.InstallStatus), ext.InstallError,
+		ext.CreatedAt, ext.UpdatedAt,
 	)
 	return err
 }
@@ -42,7 +46,7 @@ func (s *SQLiteStore) GetByID(id string) (*Extension, error) {
 	row := s.db.QueryRow(`
 		SELECT extension_id, chrome_id, name, provider, description, version,
 		       icon_path, unpacked_path, source_type, store_vendor, source_url,
-		       enabled, scope_json, created_at, updated_at
+		       enabled, scope_json, install_status, install_error, created_at, updated_at
 		FROM extensions WHERE extension_id = ?`, id)
 	return scanExtension(row)
 }
@@ -63,7 +67,7 @@ func (s *SQLiteStore) List() ([]*Extension, error) {
 	rows, err := s.db.Query(`
 		SELECT extension_id, chrome_id, name, provider, description, version,
 		       icon_path, unpacked_path, source_type, store_vendor, source_url,
-		       enabled, scope_json, created_at, updated_at
+		       enabled, scope_json, install_status, install_error, created_at, updated_at
 		FROM extensions ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
@@ -84,7 +88,7 @@ func (s *SQLiteStore) ListEnabled() ([]*Extension, error) {
 	rows, err := s.db.Query(`
 		SELECT extension_id, chrome_id, name, provider, description, version,
 		       icon_path, unpacked_path, source_type, store_vendor, source_url,
-		       enabled, scope_json, created_at, updated_at
+		       enabled, scope_json, install_status, install_error, created_at, updated_at
 		FROM extensions WHERE enabled = 1 ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
@@ -111,11 +115,11 @@ func (s *SQLiteStore) Update(ext *Extension) error {
 		UPDATE extensions SET
 			chrome_id = ?, name = ?, provider = ?, description = ?, version = ?,
 			icon_path = ?, unpacked_path = ?, source_type = ?, store_vendor = ?, source_url = ?,
-			enabled = ?, scope_json = ?, updated_at = ?
+			enabled = ?, scope_json = ?, install_status = ?, install_error = ?, updated_at = ?
 		WHERE extension_id = ?`,
 		ext.ChromeID, ext.Name, ext.Provider, ext.Description, ext.Version,
 		ext.IconPath, ext.UnpackedPath, string(ext.SourceType), string(ext.StoreVendor), ext.SourceURL,
-		boolToInt(ext.Enabled), string(scopeJSON), ext.UpdatedAt,
+		boolToInt(ext.Enabled), string(scopeJSON), string(ext.InstallStatus), ext.InstallError, ext.UpdatedAt,
 		ext.ExtensionID,
 	)
 	return err
@@ -156,17 +160,18 @@ func scanExtension(row rowScanner) (*Extension, error) {
 	var ext Extension
 	var enabledInt int
 	var scopeJSON string
-	var sourceType, storeVendor string
+	var sourceType, storeVendor, installStatus string
 	err := row.Scan(
 		&ext.ExtensionID, &ext.ChromeID, &ext.Name, &ext.Provider, &ext.Description, &ext.Version,
 		&ext.IconPath, &ext.UnpackedPath, &sourceType, &storeVendor, &ext.SourceURL,
-		&enabledInt, &scopeJSON, &ext.CreatedAt, &ext.UpdatedAt,
+		&enabledInt, &scopeJSON, &installStatus, &ext.InstallError, &ext.CreatedAt, &ext.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	ext.SourceType = SourceType(sourceType)
 	ext.StoreVendor = StoreVendor(storeVendor)
+	ext.InstallStatus = InstallStatus(installStatus)
 	ext.Enabled = enabledInt != 0
 	if err := json.Unmarshal([]byte(scopeJSON), &ext.Scope); err != nil {
 		return nil, fmt.Errorf("decode scope: %w", err)
@@ -225,4 +230,38 @@ func containsString(xs []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// UpdateInstallStatus flips an extension's install status + error message
+// without touching any other column.
+func (s *SQLiteStore) UpdateInstallStatus(id string, status InstallStatus, installErr string) error {
+	_, err := s.db.Exec(`
+		UPDATE extensions SET install_status = ?, install_error = ?, updated_at = ?
+		WHERE extension_id = ?`,
+		string(status), installErr, time.Now().UTC(), id,
+	)
+	return err
+}
+
+// ListInstalling returns every row still marked as installing. Used by
+// startup recovery to flip interrupted installs to failed.
+func (s *SQLiteStore) ListInstalling() ([]*Extension, error) {
+	rows, err := s.db.Query(`
+		SELECT extension_id, chrome_id, name, provider, description, version,
+		       icon_path, unpacked_path, source_type, store_vendor, source_url,
+		       enabled, scope_json, install_status, install_error, created_at, updated_at
+		FROM extensions WHERE install_status = ?`, string(InstallStatusInstalling))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Extension
+	for rows.Next() {
+		ext, err := scanExtension(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ext)
+	}
+	return out, rows.Err()
 }

@@ -38,7 +38,6 @@ function buildSearchText(profile: BrowserProfile): string {
     profile.profileName,
     profile.launchCode || '',
     ...(profile.tags || []),
-    ...(profile.keywords || []),
   ]
     .join(' ')
     .toLowerCase()
@@ -374,7 +373,7 @@ export function QuickLaunchModal({ open, onClose }: QuickLaunchModalProps) {
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="输入 Code 或实例名 / 标签 / 关键字"
+              placeholder="输入 Code 或实例名 / 标签"
               className="h-9 w-full border-0 bg-transparent text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none px-0"
             />
             <Button

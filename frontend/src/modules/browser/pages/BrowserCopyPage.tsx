@@ -41,7 +41,6 @@ export function BrowserCopyPage() {
         proxyConfig: sourceProfile.proxyConfig,
         launchArgs: sourceProfile.launchArgs,
         tags: sourceProfile.tags,
-        keywords: sourceProfile.keywords || [],
       })
       toast.success('配置已复制')
       navigate('/browser/list')

@@ -503,7 +503,6 @@ func normalizeProfileInput(input browser.ProfileInput) browser.ProfileInput {
 		ProxyConfig:     strings.TrimSpace(input.ProxyConfig),
 		LaunchArgs:      normalizeStringSlice(input.LaunchArgs),
 		Tags:            normalizeStringSlice(input.Tags),
-		Keywords:        normalizeStringSlice(input.Keywords),
 		GroupId:         strings.TrimSpace(input.GroupId),
 	}
 }
@@ -521,7 +520,6 @@ func profileToInput(profile *browser.Profile) browser.ProfileInput {
 		ProxyConfig:     strings.TrimSpace(profile.ProxyConfig),
 		LaunchArgs:      append([]string{}, profile.LaunchArgs...),
 		Tags:            append([]string{}, profile.Tags...),
-		Keywords:        append([]string{}, profile.Keywords...),
 		GroupId:         strings.TrimSpace(profile.GroupId),
 	}
 }

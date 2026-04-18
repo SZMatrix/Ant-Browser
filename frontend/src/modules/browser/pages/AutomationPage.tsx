@@ -26,7 +26,6 @@ ${buildAuthHeaderLine(apiAuth)}  -d '{
       "proxyId": "proxy-us",
       "launchArgs": ["--lang=en-US"],
       "tags": ["电商", "北美"],
-      "keywords": ["buyer-001", "amazon"],
       "groupId": "group-sales-us"
     },
     "launchCode": "BUYER_001"
@@ -41,8 +40,7 @@ ${buildAuthHeaderLine(apiAuth)}  -d '{
       "profileName": "buyer-002",
       "userDataDir": "buyers/buyer-002",
       "proxyConfig": "http://user:pass@127.0.0.1:8080",
-      "launchArgs": ["--disable-sync"],
-      "keywords": ["buyer-002"]
+      "launchArgs": ["--disable-sync"]
     },
     "autoLaunch": true,
     "start": {
@@ -266,7 +264,7 @@ export function AutomationPage() {
           >
             <CodeBlock text={sampleCreateRequest} />
             <div className="mt-3 text-sm text-[var(--color-text-secondary)] space-y-1">
-              <p><code>profile</code>: 持久化的实例配置，支持实例名、代理、标签、关键字、分组、默认启动参数等字段。</p>
+              <p><code>profile</code>: 持久化的实例配置，支持实例名、代理、标签、分组、默认启动参数等字段。</p>
               <p><code>launchCode</code>: 可选的自定义启动码；如果不传，系统会自动生成。</p>
               <p><code>autoLaunch</code> + <code>start</code>: 可选，表示创建后立即启动，并附带一次性启动参数。</p>
               <p>同一资源还支持 <code>GET /api/profiles</code>、<code>GET/PUT/DELETE /api/profiles/{'{profileId}'}</code>，用于后续查询、更新、删除。</p>
@@ -310,7 +308,7 @@ export function AutomationPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-[var(--color-text-secondary)]">
               <div className="rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-bg-secondary)] p-4">
                 <p className="font-medium text-[var(--color-text-primary)]">目标匹配</p>
-                <p className="mt-1"><code>code</code> 用于精确唤起；<code>key</code> 适合关键字检索和批量调度。</p>
+                <p className="mt-1"><code>code</code> 用于精确唤起；<code>tag</code>/<code>tags</code> 适合按业务标签批量调度，<code>groupId</code> 按分组定位。</p>
               </div>
               <div className="rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-bg-secondary)] p-4">
                 <p className="font-medium text-[var(--color-text-primary)]">接管方式</p>
@@ -326,8 +324,8 @@ export function AutomationPage() {
           >
             <CodeBlock text={sampleRequest} />
             <div className="mt-3 text-sm text-[var(--color-text-secondary)] space-y-1">
-              <p><code>code</code> / <code>key</code>: 二选一即可；<code>code</code> 按 LaunchCode 精确匹配，<code>key</code> 按实例关键字优先精确、未命中时再模糊匹配。</p>
-              <p><code>matchMode</code>: 多命中时的行为控制，支持 <code>unique</code> / <code>first</code> / <code>all</code>；传 <code>key</code> 时默认 <code>first</code>。</p>
+              <p><code>code</code> / <code>tag</code> / <code>tags</code> / <code>groupId</code>: 任选一种；<code>code</code> 按 LaunchCode 精确匹配；<code>tag</code>/<code>tags</code> 按业务标签命中；<code>groupId</code> 按分组过滤。</p>
+              <p><code>matchMode</code>: 多命中时的行为控制，支持 <code>unique</code> / <code>first</code> / <code>all</code>。</p>
               <p><code>launchArgs</code>: 仅本次启动附加的 Chrome 启动参数。</p>
               <p><code>startUrls</code>: 启动后打开的页面列表。</p>
               <p><code>skipDefaultStartUrls</code>: 设为 <code>true</code> 时不追加系统默认起始页。</p>

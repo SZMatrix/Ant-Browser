@@ -36,7 +36,6 @@ export function BrowserEditPage() {
     proxyConfig: '',
     launchArgs: [],
     tags: [],
-    keywords: [],
     groupId: '',
   })
   const [cores, setCores] = useState<BrowserCore[]>([])
@@ -97,7 +96,6 @@ export function BrowserEditPage() {
         proxyConfig: current.proxyConfig,
         launchArgs: currentLaunchArgs,
         tags: current.tags,
-        keywords: current.keywords || [],
         groupId: current.groupId || '',
       })
       setLaunchArgsText(currentLaunchArgs.join('\n'))

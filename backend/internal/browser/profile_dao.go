@@ -34,7 +34,7 @@ func (d *SQLiteProfileDAO) List() ([]*Profile, error) {
 		       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 		       launch_args,
-		       tags, keywords, group_id, created_at, updated_at
+		       tags, group_id, created_at, updated_at
 		FROM browser_profiles ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("查询实例列表失败: %w", err)
@@ -60,7 +60,7 @@ func (d *SQLiteProfileDAO) GetById(profileId string) (*Profile, error) {
 		       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 		       launch_args,
-		       tags, keywords, group_id, created_at, updated_at
+		       tags, group_id, created_at, updated_at
 		FROM browser_profiles WHERE profile_id = ?`, profileId)
 	p, err := scanProfile(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -74,7 +74,6 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 	fingerprintArgs, _ := json.Marshal(profile.FingerprintArgs)
 	launchArgs, _ := json.Marshal(profile.LaunchArgs)
 	tags, _ := json.Marshal(profile.Tags)
-	keywords, _ := json.Marshal(profile.Keywords)
 
 	now := time.Now().Format(time.RFC3339)
 	if profile.CreatedAt == "" {
@@ -88,8 +87,8 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 		INSERT INTO browser_profiles
 		  (profile_id, profile_name, user_data_dir, core_id, fingerprint_args,
 		   proxy_id, proxy_config, proxy_bind_source_id, proxy_bind_source_url, proxy_bind_name, proxy_bind_updated_at,
-		   launch_args, tags, keywords, group_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   launch_args, tags, group_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(profile_id) DO UPDATE SET
 		  profile_name     = excluded.profile_name,
 		  user_data_dir    = excluded.user_data_dir,
@@ -103,13 +102,12 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 		  proxy_bind_updated_at = excluded.proxy_bind_updated_at,
 		  launch_args      = excluded.launch_args,
 		  tags             = excluded.tags,
-		  keywords         = excluded.keywords,
 		  group_id         = excluded.group_id,
 		  updated_at       = excluded.updated_at`,
 		profile.ProfileId, profile.ProfileName, profile.UserDataDir, profile.CoreId,
 		string(fingerprintArgs), profile.ProxyId, profile.ProxyConfig,
 		profile.ProxyBindSourceID, profile.ProxyBindSourceURL, profile.ProxyBindName, profile.ProxyBindUpdatedAt,
-		string(launchArgs), string(tags), string(keywords), profile.GroupId,
+		string(launchArgs), string(tags), profile.GroupId,
 		profile.CreatedAt, profile.UpdatedAt,
 	)
 	if err != nil {
@@ -152,7 +150,7 @@ func (d *SQLiteProfileDAO) ListByGroup(groupId string, includeChildren bool, chi
 			       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 			       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 			       launch_args,
-			       tags, keywords, group_id, created_at, updated_at
+			       tags, group_id, created_at, updated_at
 			FROM browser_profiles WHERE group_id IN (%s) ORDER BY created_at ASC`, inClause), args...)
 	} else {
 		// 仅查询指定分组
@@ -162,7 +160,7 @@ func (d *SQLiteProfileDAO) ListByGroup(groupId string, includeChildren bool, chi
 			       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 			       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
 			       launch_args,
-			       tags, keywords, group_id, created_at, updated_at
+			       tags, group_id, created_at, updated_at
 			FROM browser_profiles WHERE group_id = ? ORDER BY created_at ASC`, groupId)
 	}
 
@@ -211,14 +209,14 @@ type scanner interface {
 
 func scanProfile(s scanner) (*Profile, error) {
 	var (
-		fingerprintArgsJSON, launchArgsJSON, tagsJSON, keywordsJSON string
-		p                                                           Profile
+		fingerprintArgsJSON, launchArgsJSON, tagsJSON string
+		p                                             Profile
 	)
 	err := s.Scan(
 		&p.ProfileId, &p.ProfileName, &p.UserDataDir, &p.CoreId,
 		&fingerprintArgsJSON, &p.ProxyId, &p.ProxyConfig,
 		&p.ProxyBindSourceID, &p.ProxyBindSourceURL, &p.ProxyBindName, &p.ProxyBindUpdatedAt,
-		&launchArgsJSON, &tagsJSON, &keywordsJSON, &p.GroupId,
+		&launchArgsJSON, &tagsJSON, &p.GroupId,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -227,7 +225,6 @@ func scanProfile(s scanner) (*Profile, error) {
 	_ = json.Unmarshal([]byte(fingerprintArgsJSON), &p.FingerprintArgs)
 	_ = json.Unmarshal([]byte(launchArgsJSON), &p.LaunchArgs)
 	_ = json.Unmarshal([]byte(tagsJSON), &p.Tags)
-	_ = json.Unmarshal([]byte(keywordsJSON), &p.Keywords)
 	if p.FingerprintArgs == nil {
 		p.FingerprintArgs = []string{}
 	}
@@ -236,9 +233,6 @@ func scanProfile(s scanner) (*Profile, error) {
 	}
 	if p.Tags == nil {
 		p.Tags = []string{}
-	}
-	if p.Keywords == nil {
-		p.Keywords = []string{}
 	}
 	return &p, nil
 }

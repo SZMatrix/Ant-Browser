@@ -344,7 +344,6 @@ func run(opts options) (*recoveryReport, error) {
 				ProxyConfig:     "",
 				LaunchArgs:      append([]string{}, cfg.Browser.DefaultLaunchArgs...),
 				Tags:            []string{"恢复"},
-				Keywords:        []string{},
 				GroupId:         "",
 				CreatedAt:       now.Format(time.RFC3339),
 				UpdatedAt:       now.Format(time.RFC3339),

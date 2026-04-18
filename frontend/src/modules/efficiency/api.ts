@@ -1,4 +1,9 @@
-import type { ExtensionView, ExtensionPreview, ExtensionChangeResult, ExtensionScope } from './types'
+import type {
+  ExtensionView,
+  ExtensionMetadata,
+  ExtensionChangeResult,
+  ExtensionScope,
+} from './types'
 
 const bindings = async (): Promise<any> => {
   try { return await import('../../wailsjs/go/main/App') } catch { return null }
@@ -10,31 +15,30 @@ export async function listExtensions(): Promise<ExtensionView[]> {
   return []
 }
 
-export async function previewFromLocal(path = ''): Promise<ExtensionPreview | null> {
+export async function identifyFromLocal(path = ''): Promise<ExtensionMetadata | null> {
   const b = await bindings()
-  if (!b?.ExtensionPreviewFromLocal) throw new Error('ExtensionPreviewFromLocal 未就绪')
-  return await b.ExtensionPreviewFromLocal(path)
+  if (!b?.ExtensionIdentifyFromLocal) throw new Error('ExtensionIdentifyFromLocal 未就绪')
+  return await b.ExtensionIdentifyFromLocal(path)
 }
 
-export async function previewFromStore(storeURL: string): Promise<ExtensionPreview | null> {
+export async function identifyFromStore(storeURL: string): Promise<ExtensionMetadata | null> {
   const b = await bindings()
-  if (!b?.ExtensionPreviewFromStore) throw new Error('ExtensionPreviewFromStore 未就绪')
-  return await b.ExtensionPreviewFromStore(storeURL)
+  if (!b?.ExtensionIdentifyFromStore) throw new Error('ExtensionIdentifyFromStore 未就绪')
+  return await b.ExtensionIdentifyFromStore(storeURL)
 }
 
-export async function commitExtension(
-  stagingToken: string,
+export async function createInstalling(
+  meta: ExtensionMetadata,
   scope: ExtensionScope,
   overrideName: string,
-  duplicateOf: string,
 ): Promise<ExtensionView> {
   const b = await bindings()
-  return await b.ExtensionCommit(stagingToken, scope, overrideName, duplicateOf)
+  return await b.ExtensionCreateInstalling(meta, scope, overrideName)
 }
 
-export async function cancelPreview(stagingToken: string): Promise<void> {
+export async function retryInstall(id: string): Promise<void> {
   const b = await bindings()
-  if (b?.ExtensionCancelPreview) await b.ExtensionCancelPreview(stagingToken)
+  if (b?.ExtensionRetryInstall) await b.ExtensionRetryInstall(id)
 }
 
 export async function setEnabled(id: string, enabled: boolean): Promise<ExtensionChangeResult> {

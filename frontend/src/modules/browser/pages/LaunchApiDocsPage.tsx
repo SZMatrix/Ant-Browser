@@ -16,9 +16,9 @@ const DOC_OVERVIEW = `# 自动化接口文档（重构版）
 
 本页聚焦 **外部脚本 / 调度器通过 HTTP 创建并唤起实例** 的场景，重点回答 5 个问题：
 
-1. 如何通过 HTTP 创建实例配置，并写入代理 / 标签 / 关键字 / 分组等信息
-2. 如何通过 Code 或关键字直接唤起实例
-3. 如何通过 \`profileId / profileName / keyword / tags / groupId\` 选择实例
+1. 如何通过 HTTP 创建实例配置，并写入代理 / 标签 / 分组等信息
+2. 如何通过 Code 直接唤起实例
+3. 如何通过 \`profileId / profileName / tags / groupId\` 选择实例
 4. 如何带参数启动，并拿到固定 \`cdpUrl\` 接入 CDP
 5. 如何通过日志排查选择器命中和启动失败问题
 
@@ -39,13 +39,12 @@ const DOC_OVERVIEW = `# 自动化接口文档（重构版）
 
 ## 当前支持能力
 
-- 支持通过 \`/api/profiles\` 进行实例配置的创建、查询、更新、删除，并写入代理 / 标签 / 关键字 / 分组 / 启动参数等信息
+- 支持通过 \`/api/profiles\` 进行实例配置的创建、查询、更新、删除，并写入代理 / 标签 / 分组 / 启动参数等信息
 - 兼容旧版：\`GET /api/launch/{code}\`
 - 推荐主入口：\`POST /api/launch\`
-- \`POST /api/launch\` 中的 \`code\` 字段支持“LaunchCode 优先，关键字兜底”
-- 支持复杂选择器：\`code / profileId / profileName / key / keyword / keywords / tag / tags / groupId / matchMode\`
+- \`POST /api/launch\` 中的 \`code\` 字段支持”LaunchCode 优先，code 兜底”
+- 支持复杂选择器：\`code / profileId / profileName / tag / tags / groupId / matchMode\`
 - \`selector\` 与顶层选择字段可混用，服务端会做归一化合并
-- \`key\` 会优先精确命中 \`keywords[]\`；精确没命中时再参与模糊匹配
 - 多命中时支持三种行为：\`unique\` / \`first\` / \`all\`
 - 启动后返回：\`profileId / profileName / launchCode / pid / debugPort / debugReady / runtimeWarning / cdpPort / cdpUrl\`
 - 外部统一使用 LaunchServer 固定端口接入 CDP，\`debugPort\` 仅表示内部实际调试端口
@@ -58,7 +57,7 @@ const DOC_OVERVIEW = `# 自动化接口文档（重构版）
 - Ant Browser 应用已启动
 - Launch 服务监听本机（地址见本页顶部）
 - 如启用了 API 认证，请准备好请求头 \`X-Ant-Api-Key: <your-api-key>\`
-- 如果你要用 \`key / keyword / tags\` 选择实例，需要先在实例配置里维护这些字段
+- 如果你要用 \`tags\` 选择实例，需要先在实例配置里维护这些字段
 - 如果你要用 \`groupId\`，请保证脚本拿到的是分组 ID，不是分组展示名
 
 ## 自动化链路
@@ -84,19 +83,19 @@ const DOC_QUICKSTART = `# 快速接入（3 分钟）
 
 - \`launchCode\`：最稳，适合生产脚本
 - \`profileId\`：适合系统内部编排
-- \`key / keywords / tags\`：适合“按业务语义找实例”的场景
+- \`tags / groupId\`：适合”按业务语义找实例”的场景
 
-如果你准备使用关键字或标签：
+如果你准备使用标签：
 
 1. 打开实例编辑页
-2. 给目标实例填好 \`keywords\`
-3. 视情况补上 \`tags\`、\`groupId\`
+2. 给目标实例填好 \`tags\`
+3. 视情况补上 \`groupId\`
 
-如果你的外部脚本手里只有“账号 / 业务关键字”：
+如果你的外部脚本手里只有”账号 / 业务标识”：
 
 - 推荐直接走 \`POST /api/launch\`
-- 可以把账号或关键字直接放进 \`code\`
-- 后端会先按真实 LaunchCode 查；查不到再按关键字匹配，并在多命中时默认取第一个
+- 可以把账号或标识直接放进 \`code\`
+- 后端会先按真实 LaunchCode 查；查不到时默认取第一个
 - 如果需要把所有命中实例都启动，显式传 \`matchMode=all\`
 
 ## 如果启用 API 认证
@@ -147,16 +146,16 @@ curl -X POST http://127.0.0.1:19876/api/launch \\
   }'
 \`\`\`
 
-如果你只有“账号 / 关键字”，也可以直接这样写：
+如果你只有”账号 / 业务标识”，也可以直接这样写：
 
 \`\`\`bash
 curl -X POST http://127.0.0.1:19876/api/launch \\
-  -H "Content-Type: application/json" \\
+  -H “Content-Type: application/json” \\
   -d '{
-    "code": "buyer-001",
-    "launchArgs": ["--window-size=1280,800"],
-    "startUrls": ["https://example.com"],
-    "skipDefaultStartUrls": true
+    “code”: “buyer-001”,
+    “launchArgs”: [“--window-size=1280,800”],
+    “startUrls”: [“https://example.com”],
+    “skipDefaultStartUrls”: true
   }'
 \`\`\`
 
@@ -164,15 +163,14 @@ curl -X POST http://127.0.0.1:19876/api/launch \\
 
 \`\`\`bash
 curl -X POST http://127.0.0.1:19876/api/launch \\
-  -H "Content-Type: application/json" \\
+  -H “Content-Type: application/json” \\
   -d '{
-    "selector": {
-      "keyword": "checkout",
-      "tags": ["电商", "北美"],
-      "groupId": "group-sales-us",
-      "matchMode": "unique"
+    “selector”: {
+      “tags”: [“电商”, “北美”],
+      “groupId”: “group-sales-us”,
+      “matchMode”: “unique”
     },
-    "skipDefaultStartUrls": true
+    “skipDefaultStartUrls”: true
   }'
 \`\`\`
 `
@@ -185,13 +183,11 @@ const DOC_SELECTOR = `# 目标实例选择器
 
 - 单一明确标识：用 \`code\` 或 \`profileId\`
 - 人类可读标识：用 \`profileName\`
-- 业务语义匹配：用 \`keyword / keywords / tag / tags / groupId\`
+- 业务语义匹配：用 \`tag / tags / groupId\`
 
 补充说明：
 
-- 在 \`POST /api/launch\` 下，\`code\` 既可以传真实 LaunchCode，也可以传账号 / 关键字
-- 如果 \`code\` 不是有效 LaunchCode，后端会自动按关键字继续匹配
-- 这种“关键字兜底”只作用于 \`POST /api/launch\`
+- 在 \`POST /api/launch\` 下，\`code\` 既可以传真实 LaunchCode，也可以传账号 / 业务标识
 - 旧版 \`GET /api/launch/{code}\` 仍然只接受真实 Code
 
 ## 推荐写法
@@ -200,13 +196,12 @@ const DOC_SELECTOR = `# 目标实例选择器
 
 \`\`\`json
 {
-  "selector": {
-    "keyword": "checkout",
-    "tags": ["电商"],
-    "groupId": "group-sales-us",
-    "matchMode": "unique"
+  “selector”: {
+    “tags”: [“电商”],
+    “groupId”: “group-sales-us”,
+    “matchMode”: “unique”
   },
-  "skipDefaultStartUrls": true
+  “skipDefaultStartUrls”: true
 }
 \`\`\`
 
@@ -214,40 +209,32 @@ const DOC_SELECTOR = `# 目标实例选择器
 
 \`\`\`json
 {
-  "keyword": "checkout",
-  "tags": ["电商"],
-  "groupId": "group-sales-us"
+  “tags”: [“电商”],
+  “groupId”: “group-sales-us”
 }
 \`\`\`
 
 顶层字段和 \`selector\` 也可以同时出现，合并规则如下：
 
-- 同名单值字段以 \`selector\` 内为准：\`code / key / profileId / profileName / groupId / matchMode\`
-- \`keyword / keywords\` 会合并、去重，并统一归一化到 \`keywords\`
+- 同名单值字段以 \`selector\` 内为准：\`code / profileId / profileName / groupId / matchMode\`
 - \`tag / tags\` 会合并、去重，并统一归一化到 \`tags\`
 
 ## 选择字段
 
 | 字段 | 类型 | 匹配方式 | 说明 |
 |------|------|----------|------|
-| \`code\` | string | 精确匹配 / 关键字兜底 | 会自动 trim 并转成大写；先按 LaunchCode 查；仅在 POST 请求里，查不到时再按关键字匹配 |
+| \`code\` | string | 精确匹配 | 会自动 trim 并转成大写；先按 LaunchCode 查 |
 | \`profileId\` | string | 精确匹配 | 实例唯一 ID |
 | \`profileName\` | string | 精确匹配 | 名称忽略大小写，适合名称唯一的实例 |
-| \`key\` | string | 先精确后模糊 | 先在实例 \`keywords[]\` 中做精确相等；若没有精确命中，再按 contains 模糊匹配 |
-| \`keyword\` | string | 模糊匹配 | 在实例 \`keywords[]\` 中做 contains；日志里会归一化到 \`keywords[]\` |
-| \`keywords\` | string[] | 多词 AND | 每个查询词都必须命中某个关键字 |
 | \`tag\` | string | 精确匹配 | 标签完全相等，忽略大小写；日志里会归一化到 \`tags[]\` |
 | \`tags\` | string[] | 多标签 AND | 实例必须包含全部标签 |
 | \`groupId\` | string | 精确匹配 | 只匹配指定分组 ID |
-| \`matchMode\` | string | 行为控制 | \`unique\` / \`first\` / \`all\`；\`code / key / keyword / keywords\` 默认 \`first\`，其他默认 \`unique\` |
+| \`matchMode\` | string | 行为控制 | \`unique\` / \`first\` / \`all\`；\`code\` 默认 \`first\`，其他默认 \`unique\` |
 
 ## 组合规则
 
 - 所有已提供条件按 **AND** 组合
-- \`keywords\` 是 AND 关系
-- \`tags\` 也是 AND 关系
-- \`keyword\` 会归一化到 \`keywords\`
-- \`key\` 保持独立语义：优先精确匹配，未命中时再参与模糊匹配
+- \`tags\` 是 AND 关系
 - \`tag\` 会并入 \`tags\`
 
 ## matchMode 规则
@@ -255,7 +242,7 @@ const DOC_SELECTOR = `# 目标实例选择器
 | 值 | 含义 |
 |----|------|
 | \`unique\` | 显式要求唯一。命中 0 个返回 404，命中多个返回 409 |
-| \`first\` | 当命中多个实例时，按后端稳定顺序取第一个；\`key / keyword / keywords\` 默认就是这个行为 |
+| \`first\` | 当命中多个实例时，按后端稳定顺序取第一个；\`code\` 默认就是这个行为 |
 | \`all\` | 当命中多个实例时，按后端稳定顺序依次启动全部实例，并返回 \`items[]\` |
 
 ## 什么时候该用哪个字段
@@ -263,10 +250,10 @@ const DOC_SELECTOR = `# 目标实例选择器
 - 稳定生产脚本：优先 \`code\`
 - 系统内部编排：优先 \`profileId\`
 - 名称严格唯一：可用 \`profileName\`
-- 一类实例共享规则：用 \`keyword + tags + groupId\`
-- 外部脚本只有账号 / 关键字：可直接把值传到 \`POST.code\`
-- 容许“取第一个命中实例”：加 \`matchMode=first\`
-- 需要“把所有命中实例都启动”：加 \`matchMode=all\`
+- 一类实例共享规则：用 \`tags + groupId\`
+- 外部脚本只有账号 / 业务标识：可直接把值传到 \`POST.code\`
+- 容许”取第一个命中实例”：加 \`matchMode=first\`
+- 需要”把所有命中实例都启动”：加 \`matchMode=all\`
 `
 
 const DOC_API_INDEX = `# 接口总览
@@ -274,10 +261,10 @@ const DOC_API_INDEX = `# 接口总览
 | 能力 | 方法 | 路径 | 用途 |
 |------|------|------|------|
 | 健康检查 | GET | \`/api/health\` | 检查 Launch 服务是否可用 |
-| 实例配置管理 | GET / POST | \`/api/profiles\` | 查询实例列表，或创建包含代理/标签/关键字/分组的实例配置 |
+| 实例配置管理 | GET / POST | \`/api/profiles\` | 查询实例列表，或创建包含代理/标签/分组的实例配置 |
 | 单实例配置管理 | GET / PUT / DELETE | \`/api/profiles/{profileId}\` | 查询、更新、删除指定实例配置 |
 | 按 Code 启动 | GET | \`/api/launch/{code}\` | 兼容旧版、最快捷的唤起方式 |
-| 选择器启动 | POST | \`/api/launch\` | 支持 code / profileId / 名称 / 关键字 / 标签 / 分组 |
+| 选择器启动 | POST | \`/api/launch\` | 支持 code / profileId / 名称 / 标签 / 分组 |
 | CDP 统一入口 | GET / WS | \`/json/version\`、\`/json/list\`、\`/devtools/...\` | 将非 \`/api\` 请求代理到当前活动实例 |
 | 调用记录 | GET | \`/api/launch/logs?limit=50\` | 查看最近接口调用与错误 |
 
@@ -361,7 +348,6 @@ DELETE /api/profiles/{profileId}
 | \`profile.proxyConfig\` | string | 否 | 直接写死的代理配置，如 \`http://user:pass@host:port\` |
 | \`profile.launchArgs\` | string[] | 否 | 实例默认启动参数，会持久化 |
 | \`profile.tags\` | string[] | 否 | 实例标签 |
-| \`profile.keywords\` | string[] | 否 | 实例关键字，供 \`/api/launch\` 检索 |
 | \`profile.groupId\` | string | 否 | 所属分组 ID |
 | \`launchCode\` | string | 否 | 自定义启动码，4-32 位，字符集 \`A-Z 0-9 _ -\` |
 | \`autoLaunch\` | boolean | 否 | 创建后是否立即启动 |
@@ -381,7 +367,6 @@ curl -X POST http://127.0.0.1:19876/api/profiles \\
       "proxyId": "proxy-us",
       "launchArgs": ["--lang=en-US"],
       "tags": ["电商", "北美"],
-      "keywords": ["buyer-001", "amazon"],
       "groupId": "group-sales-us"
     },
     "launchCode": "BUYER_001"
@@ -397,8 +382,7 @@ curl -X POST http://127.0.0.1:19876/api/profiles \\
     "profile": {
       "profileName": "buyer-002",
       "proxyConfig": "http://user:pass@127.0.0.1:8080",
-      "launchArgs": ["--disable-sync"],
-      "keywords": ["buyer-002"]
+      "launchArgs": ["--disable-sync"]
     },
     "autoLaunch": true,
     "start": {
@@ -425,7 +409,6 @@ curl -X POST http://127.0.0.1:19876/api/profiles \\
     "proxyId": "proxy-us",
     "proxyConfig": "socks5://127.0.0.1:1080",
     "tags": ["电商", "北美"],
-    "keywords": ["buyer-001", "amazon"],
     "groupId": "group-sales-us"
   }
 }
@@ -464,8 +447,7 @@ curl -X POST http://127.0.0.1:19876/api/profiles \\
   -H "Content-Type: application/json" \\
   -d '{
     "profile": {
-      "profileName": "buyer-003",
-      "keywords": ["buyer-003"]
+      "profileName": "buyer-003"
     }
   }'
 
@@ -528,7 +510,6 @@ curl -X PUT http://127.0.0.1:19876/api/profiles/550e8400-e29b-41d4-a716-44665544
       "proxyId": "proxy-us",
       "launchArgs": ["--lang=en-US"],
       "tags": ["电商", "北美"],
-      "keywords": ["buyer-001", "amazon"],
       "groupId": "group-sales-us"
     },
     "launchCode": "BUYER_001",
@@ -574,7 +555,7 @@ GET /api/launch/{code}
 
 - 适合“我已经知道唯一 Code”的场景
 - 只支持 \`code\`，不支持复杂选择器
-- 不支持关键字兜底；如果你想传账号 / 关键字，请改用 \`POST /api/launch\`
+- 只支持真实 LaunchCode；如果你想按标签或分组选择，请改用 \`POST /api/launch\`
 - 实例已运行时返回当前运行信息（幂等）
 
 ## 请求示例
@@ -612,10 +593,9 @@ POST /api/launch
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | \`selector\` | object | 否 | 推荐写法，放复杂选择条件 |
-| \`code\` | string | 否 | 兼容旧版 flat 写法；POST 下支持“Code 优先，关键字兜底” |
+| \`code\` | string | 否 | 兼容旧版 flat 写法；按 LaunchCode 精确查找 |
 | \`profileId\` | string | 否 | 顶层选择字段 |
 | \`profileName\` | string | 否 | 顶层选择字段 |
-| \`key / keyword / keywords\` | string / string[] | 否 | 顶层关键字条件 |
 | \`tag / tags\` | string / string[] | 否 | 顶层标签条件 |
 | \`groupId\` | string | 否 | 顶层分组条件 |
 | \`matchMode\` | string | 否 | \`unique\` / \`first\` / \`all\` |
@@ -623,7 +603,7 @@ POST /api/launch
 | \`startUrls\` | string[] | 否 | 本次启动打开 URL 列表 |
 | \`skipDefaultStartUrls\` | boolean | 否 | 跳过系统默认起始页 |
 
-> 注意：\`selector\` 与顶层选择字段可以混用，不是互斥关系。重名单值字段以 \`selector\` 为准；\`keyword / keywords\`、\`tag / tags\` 会合并并去重。至少要提供一个选择字段。
+> 注意：\`selector\` 与顶层选择字段可以混用，不是互斥关系。重名单值字段以 \`selector\` 为准；\`tag / tags\` 会合并并去重。至少要提供一个选择字段。
 
 ## 示例 1：旧版 code 写法
 
@@ -636,7 +616,7 @@ curl -X POST http://127.0.0.1:19876/api/launch \\
   }'
 \`\`\`
 
-## 示例 1B：\`code\` 直接传账号 / 关键字
+## 示例 1B：\`code\` 直接传账号 / 业务标识
 
 \`\`\`bash
 curl -X POST http://127.0.0.1:19876/api/launch \\
@@ -652,10 +632,9 @@ curl -X POST http://127.0.0.1:19876/api/launch \\
 说明：
 
 - 先按真实 LaunchCode 查
-- 查不到就把 \`buyer-001\` 当关键字去匹配实例
 - 如果命中多个实例，默认取第一个
 
-## 示例 1C：\`code\` 传关键字，并把所有命中实例都启动
+## 示例 1C：\`code\` 传标识，并把所有命中实例都启动
 
 \`\`\`bash
 curl -X POST http://127.0.0.1:19876/api/launch \\
@@ -692,14 +671,13 @@ curl -X POST http://127.0.0.1:19876/api/launch \\
   }'
 \`\`\`
 
-## 示例 4：按关键字 + 标签 + 分组定位实例
+## 示例 4：按标签 + 分组定位实例
 
 \`\`\`bash
 curl -X POST http://127.0.0.1:19876/api/launch \\
   -H "Content-Type: application/json" \\
   -d '{
     "selector": {
-      "keyword":"checkout",
       "tags":["电商","北美"],
       "groupId":"group-sales-us",
       "matchMode":"unique"
@@ -709,41 +687,27 @@ curl -X POST http://127.0.0.1:19876/api/launch \\
   }'
 \`\`\`
 
-## 示例 5：多关键字 AND 匹配
+## 示例 5：允许多命中时取第一个
 
 \`\`\`bash
 curl -X POST http://127.0.0.1:19876/api/launch \\
   -H "Content-Type: application/json" \\
   -d '{
     "selector": {
-      "keywords":["amazon","buyer","checkout"],
       "tags":["电商"],
-      "matchMode":"unique"
-    }
-  }'
-\`\`\`
-
-## 示例 6：允许多命中时取第一个
-
-\`\`\`bash
-curl -X POST http://127.0.0.1:19876/api/launch \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "selector": {
-      "keyword":"shop",
       "matchMode":"first"
     }
   }'
 \`\`\`
 
-## 示例 7：允许多命中时全部启动
+## 示例 6：允许多命中时全部启动
 
 \`\`\`bash
 curl -X POST http://127.0.0.1:19876/api/launch \\
   -H "Content-Type: application/json" \\
   -d '{
     "selector": {
-      "keyword":"shop",
+      "tags":["电商"],
       "matchMode":"all"
     }
   }'
@@ -852,8 +816,8 @@ GET /api/launch/logs?limit=50
 - 默认返回最近 50 条
 - 最大支持 200 条
 - 返回顺序：按时间倒序（最新在前）
-- 不管是按 Code 启动，还是按关键字/标签启动，都会记录当次使用的 selector
-- 日志里的 \`selector\` 是归一化结果：例如 \`keyword\` 会显示为 \`keywords[]\`，\`tag\` 会显示为 \`tags[]\`
+- 不管是按 Code 启动，还是按标签启动，都会记录当次使用的 selector
+- 日志里的 \`selector\` 是归一化结果：例如 \`tag\` 会显示为 \`tags[]\`
 
 ## 请求示例
 
@@ -874,7 +838,6 @@ curl http://127.0.0.1:19876/api/launch/logs?limit=20
       "clientIp": "127.0.0.1",
       "code": "A3F9K2",
       "selector": {
-        "keywords": ["checkout"],
         "tags": ["电商", "北美"],
         "groupId": "group-sales-us",
         "matchMode": "unique"
@@ -906,9 +869,9 @@ const DOC_SCENARIOS = `# 场景示例
 
 - 最稳定
 - 不怕名称变更
-- 不怕关键字维护失误
+- 不怕标签维护失误
 
-## 场景 1B：外部脚本只有账号 / 业务关键字
+## 场景 1B：外部脚本只有账号 / 业务标识
 
 直接用 \`POST /api/launch\` 的 \`code\` 字段。
 
@@ -916,66 +879,64 @@ const DOC_SCENARIOS = `# 场景示例
 
 \`\`\`json
 {
-  "code": "buyer-001",
-  "skipDefaultStartUrls": true
+  “code”: “buyer-001”,
+  “skipDefaultStartUrls”: true
 }
 \`\`\`
 
 说明：
 
 - 这是给外部脚本最省事的写法
-- 后端会先按真实 Code 查，再按关键字兜底
+- 后端会先按真实 Code 查
 - 如果一类实例会命中多个，默认取第一个
 - 如果你就是要全起，显式加 \`matchMode=all\`
 
 ## 场景 2：一个业务线下有多组实例
 
-用 \`keyword + tags + groupId\`。
+用 \`tags + groupId\`。
 
 示例：
 
 \`\`\`json
 {
-  "selector": {
-    "keyword": "checkout",
-    "tags": ["电商", "北美"],
-    "groupId": "group-sales-us",
-    "matchMode": "unique"
+  “selector”: {
+    “tags”: [“电商”, “北美”],
+    “groupId”: “group-sales-us”,
+    “matchMode”: “unique”
   }
 }
 \`\`\`
 
 ## 场景 3：批量模板实例，需要把命中的实例全部启动
 
-用 \`keyword + matchMode=all\`。
+用 \`tags + matchMode=all\`。
 
 示例：
 
 \`\`\`json
 {
-  "selector": {
-    "keyword": "template",
-    "matchMode": "all"
+  “selector”: {
+    “tags”: [“模板”],
+    “matchMode”: “all”
   }
 }
 \`\`\`
 
-## 场景 4：想按“业务语义”启动，但又担心误命中
+## 场景 4：想按”业务语义”启动，但又担心误命中
 
 用多条件收窄：
 
 \`\`\`json
 {
-  "selector": {
-    "keywords": ["amazon", "buyer", "checkout"],
-    "tags": ["电商", "北美"],
-    "groupId": "group-sales-us",
-    "matchMode": "unique"
+  “selector”: {
+    “tags”: [“电商”, “北美”],
+    “groupId”: “group-sales-us”,
+    “matchMode”: “unique”
   }
 }
 \`\`\`
 
-## 场景 5：脚本第一次靠关键字命中，后续改用 Code
+## 场景 5：脚本第一次靠标签命中，后续改用 Code
 
 返回体里会附带 \`launchCode\`，你可以把它缓存下来，下一次直接用 Code 启动。
 `
@@ -987,7 +948,7 @@ const DOC_ERRORS = `# 错误码与重试策略
 | 400 | 请求体非法 / 含未知字段 / selector 缺失 / matchMode 非法 / launchCode 格式错误 | 修复参数后重试 |
 | 401 | 已启用 API 认证，但缺少或写错 API Key | 补上正确的 \`X-Ant-Api-Key\` 请求头后重试 |
 | 403 | 非 localhost 访问 | 改为本机请求 |
-| 404 | GET 的 Code 不存在 / POST 的 code 关键字兜底后仍未命中 / selector 没命中实例 | 检查 code、keywords、tags、groupId |
+| 404 | GET 的 Code 不存在 / selector 没命中实例 | 检查 code、tags、groupId |
 | 405 | 方法错误 | 使用正确 HTTP 方法 |
 | 409 | selector 命中多个实例 / 创建或更新时 launchCode 冲突 / 达到实例上限 / 删除运行中实例 | 收窄条件、换一个 launchCode，或先停掉实例后重试 |
 | 500 | 启动失败 | 查 \`/api/launch/logs\` + 应用日志 |
@@ -1021,7 +982,6 @@ def create_profile(auto_launch: bool = False) -> dict:
             "profile": {
                 "profileName": "buyer-100",
                 "proxyId": "proxy-us",
-                "keywords": ["buyer-100"],
             },
             "autoLaunch": auto_launch,
             "start": {
@@ -1037,7 +997,7 @@ def create_profile(auto_launch: bool = False) -> dict:
     return data
 \`\`\`
 
-## Python：按关键字启动并连接 CDP
+## Python：按标签启动并连接 CDP
 
 \`\`\`python
 import requests
@@ -1061,7 +1021,6 @@ def launch(selector: dict) -> dict:
 
 with sync_playwright() as p:
     data = launch({
-        "keyword": "checkout",
         "tags": ["电商", "北美"],
         "groupId": "group-sales-us",
         "matchMode": "unique",
@@ -1095,13 +1054,12 @@ async function launch(selector, extra = {}) {
 }
 
 await launch({
-  keywords: ['amazon', 'buyer', 'checkout'],
   tags: ['电商'],
   matchMode: 'unique',
 })
 \`\`\`
 
-## PowerShell：按名称或关键字启动
+## PowerShell：按名称或 Code 启动
 
 \`\`\`powershell
 $body = @{
@@ -1112,7 +1070,7 @@ $body = @{
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:19876/api/launch" -ContentType "application/json" -Body $body
 \`\`\`
 
-## cURL：\`code\` 传关键字
+## cURL：按 \`code\` 启动
 
 \`\`\`bash
 curl -X POST http://127.0.0.1:19876/api/launch \\
@@ -1133,37 +1091,31 @@ const DOC_PRACTICES = `# 最佳实践
 1. \`code\`
 2. \`profileId\`
 3. \`profileName\`
-4. \`keyword / tags / groupId\`
+4. \`tags / groupId\`
 
 补充：
 
-- 如果外部脚本只有账号 / 关键字，又不想额外构造 selector，优先用 \`POST.code\`
+- 如果外部脚本只有账号 / 业务标识，又不想额外构造 selector，优先用 \`POST.code\`
 
-## 2) 关键字维护规范
-
-- \`keywords\` 里尽量放稳定业务词，不要放容易漂移的描述
-- 同一类实例的关键字保持风格统一
-- 如果脚本要靠关键字精确命中，至少再加一个 \`tag\` 或 \`groupId\`
-
-## 3) 标签与分组策略
+## 2) 标签与分组策略
 
 - \`tags\` 用来表达能力或属性，例如：\`电商\`、\`北美\`、\`付款\`
 - \`groupId\` 用来表达组织归属，例如：\`group-sales-us\`
 - 不建议只靠单个宽泛标签做生产启动条件
 
-## 4) 启动参数策略
+## 3) 启动参数策略
 
 - 把通用参数放在实例默认配置
 - 把任务临时参数放在 \`launchArgs\`
 - 只在当前任务需要时才传 \`startUrls\`
 
-## 5) 创建触发策略
+## 4) 创建触发策略
 
-- 批量导入或配置预热：用“仅创建配置”
-- 单任务一次性跑通：用“创建并立即启动”
-- 生产调度和高可用编排：优先“先创建，再单独触发启动”
+- 批量导入或配置预热：用”仅创建配置”
+- 单任务一次性跑通：用”创建并立即启动”
+- 生产调度和高可用编排：优先”先创建，再单独触发启动”
 
-## 6) 排障流程
+## 5) 排障流程
 
 1. 先调 \`/api/health\`
 2. 再调 \`POST /api/launch\`
@@ -1176,7 +1128,7 @@ const DOC_TROUBLESHOOT = `# 常见问题
 ## Q1：返回 \`selector is required\`
 
 - 你没有提供 \`selector\`
-- 也没有提供顶层的 \`code / profileId / keyword / tags\` 等字段
+- 也没有提供顶层的 \`code / profileId / tags\` 等字段
 
 ## Q2：返回 \`launch code not found\`
 
@@ -1184,18 +1136,17 @@ const DOC_TROUBLESHOOT = `# 常见问题
 - 目标实例没有这个 Code
 - 你把自定义 Code 改过，但脚本没同步
 - 这通常是 \`GET /api/launch/{code}\` 或“你明确想按真实 Code 启动”的报错
-- 如果你传的是账号 / 关键字，请改用 \`POST /api/launch\`
+- 如果你需要按标签或分组选择实例，请改用 \`POST /api/launch\`
 
 ## Q3：返回 \`profile selector matched no instance\`
 
-- 关键字没有配置到实例的 \`keywords\`
 - \`tags\` 或 \`groupId\` 条件写错
 - 组合条件过严，导致 0 命中
-- 或者你在 \`POST\` 里把 \`code\` 当关键字传了，但该关键字没有命中任何实例
+- 或者你传的 \`code\` 不存在于任何实例
 
 ## Q4：返回 \`selector matched multiple profiles\`
 
-- 说明关键字过宽或标签过少
+- 说明标签过少
 - 优先补 \`groupId\` / 更多 \`tags\`
 - 如果业务允许，显式加 \`matchMode=first\`
 - 如果你要把这些命中实例全部启动，改用 \`matchMode=all\`

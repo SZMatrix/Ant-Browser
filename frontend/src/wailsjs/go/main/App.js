@@ -154,10 +154,6 @@ export function BrowserProfileSetCode(arg1, arg2) {
   return window['go']['main']['App']['BrowserProfileSetCode'](arg1, arg2);
 }
 
-export function BrowserProfileSetKeywords(arg1, arg2) {
-  return window['go']['main']['App']['BrowserProfileSetKeywords'](arg1, arg2);
-}
-
 export function BrowserProfileUpdate(arg1, arg2) {
   return window['go']['main']['App']['BrowserProfileUpdate'](arg1, arg2);
 }
@@ -226,12 +222,8 @@ export function DeleteGroup(arg1) {
   return window['go']['main']['App']['DeleteGroup'](arg1);
 }
 
-export function ExtensionCancelPreview(arg1) {
-  return window['go']['main']['App']['ExtensionCancelPreview'](arg1);
-}
-
-export function ExtensionCommit(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['ExtensionCommit'](arg1, arg2, arg3, arg4);
+export function ExtensionCreateInstalling(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ExtensionCreateInstalling'](arg1, arg2, arg3);
 }
 
 export function ExtensionDelete(arg1) {
@@ -246,20 +238,24 @@ export function ExtensionGetPendingRestarts() {
   return window['go']['main']['App']['ExtensionGetPendingRestarts']();
 }
 
+export function ExtensionIdentifyFromLocal(arg1) {
+  return window['go']['main']['App']['ExtensionIdentifyFromLocal'](arg1);
+}
+
+export function ExtensionIdentifyFromStore(arg1) {
+  return window['go']['main']['App']['ExtensionIdentifyFromStore'](arg1);
+}
+
 export function ExtensionList() {
   return window['go']['main']['App']['ExtensionList']();
 }
 
-export function ExtensionPreviewFromLocal(arg1) {
-  return window['go']['main']['App']['ExtensionPreviewFromLocal'](arg1);
-}
-
-export function ExtensionPreviewFromStore(arg1) {
-  return window['go']['main']['App']['ExtensionPreviewFromStore'](arg1);
-}
-
 export function ExtensionRename(arg1, arg2) {
   return window['go']['main']['App']['ExtensionRename'](arg1, arg2);
+}
+
+export function ExtensionRetryInstall(arg1) {
+  return window['go']['main']['App']['ExtensionRetryInstall'](arg1);
 }
 
 export function ExtensionSetEnabled(arg1, arg2) {

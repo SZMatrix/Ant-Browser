@@ -70,7 +70,6 @@ func TestCreateProfileAPIStoresProxyAndMetadata(t *testing.T) {
 			"proxyId": "proxy-us",
 			"launchArgs": ["--lang=en-US"],
 			"tags": ["电商", "北美"],
-			"keywords": ["buyer-001", "amazon"],
 			"groupId": "group-sales-us"
 		},
 		"launchCode": "buyer_001"
@@ -115,8 +114,8 @@ func TestCreateProfileAPIStoresProxyAndMetadata(t *testing.T) {
 	if resp.Profile.GroupId != "group-sales-us" {
 		t.Fatalf("groupId 不正确: %+v", resp.Profile)
 	}
-	if len(resp.Profile.Tags) != 2 || len(resp.Profile.Keywords) != 2 {
-		t.Fatalf("tags/keywords 不正确: %+v", resp.Profile)
+	if len(resp.Profile.Tags) != 2 {
+		t.Fatalf("tags 不正确: %+v", resp.Profile)
 	}
 
 	resolvedProfileID, err := svc.Resolve("BUYER_001")
@@ -138,8 +137,7 @@ func TestCreateProfileAPIAutoLaunchPassesStartParams(t *testing.T) {
 		"profile": {
 			"profileName": "buyer-002",
 			"proxyConfig": "http://user:pass@127.0.0.1:8080",
-			"launchArgs": ["--disable-sync"],
-			"keywords": ["buyer-002"]
+			"launchArgs": ["--disable-sync"]
 		},
 		"autoLaunch": true,
 		"start": {
@@ -230,8 +228,7 @@ func TestCreateProfileAPIRollsBackOnDuplicateLaunchCode(t *testing.T) {
 
 	payload := bytes.NewBufferString(`{
 		"profile": {
-			"profileName": "new-buyer",
-			"keywords": ["new-buyer"]
+			"profileName": "new-buyer"
 		},
 		"launchCode": "BUYER_DUP"
 	}`)

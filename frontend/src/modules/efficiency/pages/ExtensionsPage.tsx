@@ -42,6 +42,13 @@ export function ExtensionsPage() {
 
   useEffect(() => { reload() }, [reload])
 
+  useEffect(() => {
+    const runtime = (window as any).runtime
+    if (!runtime?.EventsOn) return
+    runtime.EventsOn('extensions:changed', () => { reload() })
+    return () => runtime.EventsOff?.('extensions:changed')
+  }, [reload])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return exts

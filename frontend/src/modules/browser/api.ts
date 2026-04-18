@@ -19,7 +19,6 @@ let mockProfiles: BrowserProfile[] = [
     proxyConfig: '',
     launchArgs: ['--disable-features=Translate'],
     tags: ['默认'],
-    keywords: [],
     running: false,
     debugPort: 0,
     debugReady: false,
@@ -73,7 +72,6 @@ export async function createBrowserProfile(input: BrowserProfileInput): Promise<
   const profile: BrowserProfile = {
     profileId: `mock-${Date.now()}`,
     ...input,
-    keywords: input.keywords || {},
     running: false,
     debugPort: 0,
     debugReady: false,
@@ -689,21 +687,6 @@ export async function resetBookmarks(): Promise<boolean> {
     return true
   }
   return true
-}
-
-// ============================================================================
-// Keywords API
-// ============================================================================
-
-export async function setProfileKeywords(profileId: string, keywords: string[]): Promise<BrowserProfile | null> {
-  const bindings: any = await getBindings()
-  if (bindings?.BrowserProfileSetKeywords) {
-    return (await bindings.BrowserProfileSetKeywords(profileId, keywords)) || null
-  }
-  mockProfiles = mockProfiles.map(p =>
-    p.profileId === profileId ? { ...p, keywords, updatedAt: new Date().toISOString() } : p
-  )
-  return mockProfiles.find(p => p.profileId === profileId) || null
 }
 
 // ============================================================================

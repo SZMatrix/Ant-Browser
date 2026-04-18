@@ -22,7 +22,6 @@ type Profile struct {
 	ProxyBindUpdatedAt string   `json:"proxyBindUpdatedAt"`
 	LaunchArgs         []string `json:"launchArgs"`
 	Tags               []string `json:"tags"`
-	Keywords           []string `json:"keywords"`
 	GroupId            string   `json:"groupId"` // 所属分组ID
 	LaunchCode         string   `json:"launchCode"`
 	Running            bool     `json:"running"`
@@ -47,7 +46,6 @@ type ProfileInput struct {
 	ProxyConfig     string   `json:"proxyConfig"`
 	LaunchArgs      []string `json:"launchArgs"`
 	Tags            []string `json:"tags"`
-	Keywords        []string `json:"keywords"`
 	GroupId         string   `json:"groupId"` // 所属分组ID
 }
 

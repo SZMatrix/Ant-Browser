@@ -29,7 +29,6 @@ func TestListProfilesAPIIncludesLaunchCodes(t *testing.T) {
 		ProfileName: "buyer-a",
 		ProxyId:     "proxy-us",
 		Tags:        []string{"电商"},
-		Keywords:    []string{"buyer-a"},
 	})
 	if err != nil {
 		t.Fatalf("创建测试实例失败: %v", err)
@@ -37,7 +36,6 @@ func TestListProfilesAPIIncludesLaunchCodes(t *testing.T) {
 	second, err := mgr.Create(browser.ProfileInput{
 		ProfileName: "buyer-b",
 		ProxyConfig: "http://127.0.0.1:8080",
-		Keywords:    []string{"buyer-b"},
 	})
 	if err != nil {
 		t.Fatalf("创建测试实例失败: %v", err)
@@ -91,7 +89,6 @@ func TestGetProfileAPIReturnsProfileByID(t *testing.T) {
 		ProfileName: "buyer-get",
 		ProxyConfig: "http://127.0.0.1:8080",
 		Tags:        []string{"北美"},
-		Keywords:    []string{"buyer-get"},
 		GroupId:     "group-get",
 	})
 	if err != nil {
@@ -142,7 +139,6 @@ func TestUpdateProfileAPIUpdatesFieldsAndAutoLaunches(t *testing.T) {
 	profile, err := mgr.Create(browser.ProfileInput{
 		ProfileName: "buyer-old",
 		ProxyConfig: "http://127.0.0.1:8080",
-		Keywords:    []string{"buyer-old"},
 	})
 	if err != nil {
 		t.Fatalf("创建测试实例失败: %v", err)
@@ -158,7 +154,6 @@ func TestUpdateProfileAPIUpdatesFieldsAndAutoLaunches(t *testing.T) {
 			"proxyId": "proxy-us",
 			"launchArgs": ["--lang=en-US"],
 			"tags": ["电商", "北美"],
-			"keywords": ["buyer-new", "amazon"],
 			"groupId": "group-sales-us"
 		},
 		"launchCode": "BUYER_NEW",
@@ -227,8 +222,7 @@ func TestUpdateProfileAPIRollsBackOnDuplicateLaunchCode(t *testing.T) {
 	payload := bytes.NewBufferString(`{
 		"profile": {
 			"profileName": "buyer-first-updated",
-			"proxyConfig": "http://127.0.0.1:10080",
-			"keywords": ["buyer-first-updated"]
+			"proxyConfig": "http://127.0.0.1:10080"
 		},
 		"launchCode": "BUYER_SECOND"
 	}`)

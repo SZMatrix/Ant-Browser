@@ -33,11 +33,8 @@ type LaunchRequestParams struct {
 // LaunchRequest POST /api/launch 的请求体
 type LaunchRequest struct {
 	Code        string          `json:"code"`
-	Key         string          `json:"key"`
 	ProfileID   string          `json:"profileId"`
 	ProfileName string          `json:"profileName"`
-	Keyword     string          `json:"keyword"`
-	Keywords    []string        `json:"keywords"`
 	Tag         string          `json:"tag"`
 	Tags        []string        `json:"tags"`
 	GroupID     string          `json:"groupId"`
@@ -491,11 +488,11 @@ func (s *LaunchServer) handleLaunchLogs(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *LaunchServer) launchByCode(code string, params LaunchRequestParams) (*browser.Profile, string, int, string) {
-	return s.launchBySelectorInternal(normalizeLaunchSelector(LaunchSelector{Code: code}), params, false)
+	return s.launchBySelectorInternal(normalizeLaunchSelector(LaunchSelector{Code: code}), params)
 }
 
 func (s *LaunchServer) launchBySelector(selector LaunchSelector, params LaunchRequestParams) (*browser.Profile, string, int, string) {
-	return s.launchBySelectorInternal(selector, params, true)
+	return s.launchBySelectorInternal(selector, params)
 }
 
 func (s *LaunchServer) launchProfile(profileID string, params LaunchRequestParams) (*browser.Profile, error) {
@@ -526,7 +523,7 @@ func normalizeLaunchedProfileRuntime(profile *browser.Profile) *browser.Profile 
 	return profile
 }
 
-func (s *LaunchServer) launchBySelectorInternal(selector LaunchSelector, params LaunchRequestParams, allowCodeKeywordFallback bool) (*browser.Profile, string, int, string) {
+func (s *LaunchServer) launchBySelectorInternal(selector LaunchSelector, params LaunchRequestParams) (*browser.Profile, string, int, string) {
 	var (
 		profileID  string
 		launchCode string
@@ -540,7 +537,6 @@ func (s *LaunchServer) launchBySelectorInternal(selector LaunchSelector, params 
 	if err = selector.Validate(); err != nil {
 		return nil, "", http.StatusBadRequest, err.Error()
 	}
-	selector = s.withCodeKeywordFallback(selector, allowCodeKeywordFallback)
 
 	if selector.OnlyCode() {
 		profileID, err = s.service.Resolve(selector.Code)
@@ -585,7 +581,6 @@ func (s *LaunchServer) launchAllBySelector(selector LaunchSelector, params Launc
 	if err := selector.Validate(); err != nil {
 		return nil, http.StatusBadRequest, err.Error()
 	}
-	selector = s.withCodeKeywordFallback(selector, true)
 
 	snapshots, status, errMsg := s.findProfilesBySelector(selector)
 	if errMsg != "" {
@@ -617,24 +612,6 @@ func (s *LaunchServer) launchAllBySelector(selector LaunchSelector, params Launc
 	}
 
 	return profiles, http.StatusOK, ""
-}
-
-func (s *LaunchServer) withCodeKeywordFallback(selector LaunchSelector, allow bool) LaunchSelector {
-	if !allow || strings.TrimSpace(selector.Code) == "" {
-		return selector
-	}
-	if s.service != nil {
-		if _, err := s.service.Resolve(selector.Code); err == nil {
-			return selector
-		}
-	}
-
-	fallback := selector
-	if strings.TrimSpace(fallback.Key) == "" {
-		fallback.Key = selector.Code
-	}
-	fallback.Code = ""
-	return fallback
 }
 
 func (s *LaunchServer) launchBatchSuccessPayload(profiles []*browser.Profile) map[string]interface{} {

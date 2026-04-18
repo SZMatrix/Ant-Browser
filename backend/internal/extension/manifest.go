@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -123,4 +124,25 @@ func PickIconPath(icons map[string]string) string {
 		}
 	}
 	return ""
+}
+
+// pickBestIcon returns the manifest-relative path of the largest square icon
+// declared in the manifest, or "" if no icon is declared. Unlike
+// ResolveManifestStrings, it does not touch the filesystem.
+func pickBestIcon(m *Manifest) string {
+	if m == nil || len(m.Icons) == 0 {
+		return ""
+	}
+	bestSize, bestPath := 0, ""
+	for sz, rel := range m.Icons {
+		n, err := strconv.Atoi(sz)
+		if err != nil {
+			continue
+		}
+		if n > bestSize {
+			bestSize = n
+			bestPath = rel
+		}
+	}
+	return bestPath
 }

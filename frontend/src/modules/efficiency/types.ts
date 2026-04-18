@@ -8,6 +8,8 @@ export interface ExtensionScope {
 export type SourceType = 'store' | 'local_crx' | 'local_zip'
 export type StoreVendor = '' | 'chrome' | 'edge'
 
+export type InstallStatus = 'succeeded' | 'installing' | 'failed'
+
 export interface ExtensionView {
   extensionId: string
   chromeId: string
@@ -23,19 +25,20 @@ export interface ExtensionView {
   iconDataURL: string
   pendingRestartProfileIds: string[]
   staleScopeIds: string[]
+  installStatus: InstallStatus
+  installError: string
 }
 
-export interface ExtensionPreview {
-  stagingToken: string
+export interface ExtensionMetadata {
   chromeId: string
   name: string
   provider: string
   description: string
   version: string
+  iconDataURL: string
   sourceType: SourceType
   storeVendor: StoreVendor
   sourceUrl: string
-  iconDataURL: string
   duplicateOf: string
 }
 

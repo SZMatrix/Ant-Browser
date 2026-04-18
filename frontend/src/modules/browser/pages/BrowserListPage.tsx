@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, CheckCircle, ChevronDown, ChevronRight, ChevronUp, Copy, Edit2, ExternalLink, FileText, Key, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, Gift, LayoutGrid, List } from 'lucide-react'
+import { Activity, CheckCircle, ChevronRight, ChevronUp, Copy, Edit2, ExternalLink, FileText, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, Gift, LayoutGrid, List } from 'lucide-react'
 import { Badge, Button, Card, FormItem, Input, Modal, StatCard, Table, Textarea, toast } from '../../../shared/components'
 import { fetchDashboardStats, redeemCDKey, redeemGithubStar, reloadConfig } from '../../dashboard/api'
 import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserCore, BrowserCoreInput, BrowserProfile, BrowserProxy, BrowserSettings, BrowserGroupWithCount } from '../types'
 import { InstanceFilterBar, EMPTY_FILTERS } from '../components/InstanceFilterBar'
 import type { InstanceFilters } from '../components/InstanceFilterBar'
-import { KeywordsModal } from '../components/KeywordsModal'
 import { EventsOn, BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
 import { PROJECT_GITHUB_URL } from '../../../config/links'
 import { resolveActionErrorMessage, resolveActionFeedback } from '../utils/actionErrors'
@@ -153,56 +152,6 @@ function LaunchCodeCell({ profileId, code, onRefresh }: { profileId: string; cod
   )
 }
 
-function KeywordInlineRow({ keywords }: { keywords: string[] }) {
-  const [expanded, setExpanded] = useState(false)
-  const cRef = (useMemo(() => ({ current: null as HTMLDivElement | null }), []) as unknown) as React.MutableRefObject<HTMLDivElement | null>
-  const [isOverflowing, setIsOverflowing] = useState(false)
-
-  useEffect(() => {
-    if (cRef.current) {
-      setIsOverflowing(cRef.current.scrollHeight > 36)
-    }
-  }, [keywords])
-
-  if (!keywords?.length) {
-    return <span className="text-xs text-[var(--color-text-muted)] italic">暂无关键字</span>
-  }
-
-  return (
-    <div className="flex items-start gap-4 w-full">
-      <div
-        ref={cRef}
-        className={`flex flex-wrap gap-2 flex-1 transition-all duration-300 ${expanded ? '' : 'overflow-hidden max-h-[32px]'}`}
-      >
-        {keywords.map((kw, i) => (
-          <span
-            key={i}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs
-              bg-[var(--color-bg-surface)] border border-[var(--color-border-default)]
-              text-[var(--color-text-secondary)] max-w-[200px]"
-            title={kw}
-          >
-            <span className="text-[var(--color-text-muted)] font-mono shrink-0">{i + 1}.</span>
-            <span className="truncate">{kw}</span>
-          </span>
-        ))}
-      </div>
-      {isOverflowing && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="shrink-0 flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] hover:text-indigo-400 mt-1 focus:outline-none"
-        >
-          {expanded ? (
-            <>收回 <ChevronUp className="w-3.5 h-3.5" /></>
-          ) : (
-            <>展开详情 <ChevronDown className="w-3.5 h-3.5" /></>
-          )}
-        </button>
-      )}
-    </div>
-  )
-}
-
 export function BrowserListPage() {
   const [profiles, setProfiles] = useState<BrowserProfile[]>([])
   const [loading, setLoading] = useState(true)
@@ -256,12 +205,6 @@ export function BrowserListPage() {
   const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set())
   const profilesRef = useRef<BrowserProfile[]>([])
   const silentRefreshInFlightRef = useRef(false)
-
-  // 关键字弹窗
-  const [kwModal, setKwModal] = useState<{ open: boolean; profile: BrowserProfile | null }>({ open: false, profile: null })
-
-  const openKwModal = (profile: BrowserProfile) => setKwModal({ open: true, profile })
-  const closeKwModal = () => setKwModal({ open: false, profile: null })
 
   // 复制弹窗
   const [copyModal, setCopyModal] = useState<{ open: boolean; profile: BrowserProfile | null }>({ open: false, profile: null })
@@ -527,11 +470,6 @@ export function BrowserListPage() {
         if (!effectiveCore || effectiveCore.coreId !== filters.coreId) return false
       }
       if (filters.tags.size > 0 && !p.tags?.some(t => filters.tags.has(t))) return false
-      if (filters.kwSearch) {
-        const q = filters.kwSearch.toLowerCase()
-        const hit = p.keywords?.some(v => v.toLowerCase().includes(q))
-        if (!hit) return false
-      }
       return true
     }).sort((a, b) => naturalCompare(a.profileName, b.profileName))
   }, [profiles, filters, defaultCore, cores])
@@ -620,8 +558,6 @@ export function BrowserListPage() {
       return next
     })
   }
-
-
 
   const handleSelectAll = () => {
     setSelectedIds(new Set(filteredProfiles.map(p => p.profileId)))
@@ -910,12 +846,6 @@ export function BrowserListPage() {
       render: (value, record) => <LaunchCodeCell profileId={record.profileId} code={value || ''} onRefresh={loadProfiles} />,
     },
     {
-      key: 'keywords',
-      title: '关键字',
-      width: 200,
-      render: (value) => <KeywordInlineRow keywords={value || []} />,
-    },
-    {
       key: 'updatedAt',
       title: '上次更新',
       render: formatTime,
@@ -941,7 +871,6 @@ export function BrowserListPage() {
               </Button>
             )}
             <Button size="sm" variant="ghost" onClick={() => handleRestart(record.profileId)} title="重启" disabled={isBusy}><RotateCcw className="w-3.5 h-3.5" /></Button>
-            <Button size="sm" variant="ghost" onClick={() => openKwModal(record)} title="关键字" disabled={isBusy}><Key className="w-3.5 h-3.5" /></Button>
             <Link to={`/browser/edit/${record.profileId}`}><Button size="sm" variant="ghost" title="配置" disabled={isBusy}><Settings className="w-3.5 h-3.5" /></Button></Link>
             <Button size="sm" variant="ghost" onClick={() => openCopyModal(record)} title="克隆" disabled={isBusy}><Copy className="w-3.5 h-3.5" /></Button>
             <Button size="sm" variant="ghost" onClick={() => handleDelete(record.profileId)} title="删除" disabled={isBusy}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>
@@ -1120,7 +1049,6 @@ export function BrowserListPage() {
                         )}
                         <span className="w-px h-4 bg-[var(--color-border-muted)] mx-1"></span>
                         <Button size="sm" variant="ghost" onClick={() => handleRestart(record.profileId)} title="重启" className="px-3" disabled={isBusy}><RotateCcw className="w-4 h-4 mr-1.5" />重启</Button>
-                        <Button size="sm" variant="ghost" onClick={() => openKwModal(record)} title="关键字管理" className="px-3" disabled={isBusy}><Key className="w-4 h-4 mr-1.5" />关键字</Button>
                         <Link to={`/browser/edit/${record.profileId}`}><Button size="sm" variant="ghost" title="配置" className="px-3" disabled={isBusy}><Settings className="w-4 h-4 mr-1.5" />配置</Button></Link>
                         <Button size="sm" variant="ghost" onClick={() => openCopyModal(record)} title="克隆" className="px-3" disabled={isBusy}><Copy className="w-4 h-4 mr-1.5" />克隆</Button>
                         <Button size="sm" variant="ghost" onClick={() => handleDelete(record.profileId)} title="删除" className="px-3 text-red-500 hover:text-red-600 hover:bg-red-50" disabled={isBusy}><Trash2 className="w-4 h-4 mr-1.5" />删除</Button>
@@ -1147,13 +1075,6 @@ export function BrowserListPage() {
                       </div>
                     </div>
 
-                    {/* Footer: Keywords */}
-                    <div className="border-t border-[var(--color-border-muted)]/50 pt-2 flex items-start gap-2 flex-1 min-h-0">
-                      <span className="text-xs font-medium text-[var(--color-text-primary)] shrink-0 pt-0.5">系统关键字</span>
-                      <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-                        <KeywordInlineRow keywords={record.keywords || []} />
-                      </div>
-                    </div>
                   </div>
                 )
               })}
@@ -1264,22 +1185,6 @@ export function BrowserListPage() {
           <p className="text-sm text-[var(--color-text-muted)]">请前往编辑页面重新选择可用链路；如果是订阅导入，先刷新订阅并确认该节点仍存在。</p>
         </div>
       </Modal>
-
-      {/* 关键字弹窗 */}
-      {kwModal.profile && (
-        <KeywordsModal
-          open={kwModal.open}
-          profileId={kwModal.profile.profileId}
-          profileName={kwModal.profile.profileName}
-          initialKeywords={kwModal.profile.keywords || []}
-          onClose={closeKwModal}
-          onSaved={(keywords) => {
-            updateProfilesState(prev => prev.map(p =>
-              p.profileId === kwModal.profile!.profileId ? { ...p, keywords } : p
-            ))
-          }}
-        />
-      )}
 
       {/* 扩容弹窗 */}
       <Modal

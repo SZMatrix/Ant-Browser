@@ -18,11 +18,8 @@ const (
 // 推荐在 POST /api/launch 中通过 selector 传入，兼容旧版 top-level code 用法。
 type LaunchSelector struct {
 	Code        string   `json:"code,omitempty"`
-	Key         string   `json:"key,omitempty"`
 	ProfileID   string   `json:"profileId,omitempty"`
 	ProfileName string   `json:"profileName,omitempty"`
-	Keyword     string   `json:"keyword,omitempty"`
-	Keywords    []string `json:"keywords,omitempty"`
 	Tag         string   `json:"tag,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
 	GroupID     string   `json:"groupId,omitempty"`
@@ -37,10 +34,8 @@ func mergeLaunchSelector(req LaunchRequest) LaunchSelector {
 
 	return normalizeLaunchSelector(LaunchSelector{
 		Code:        firstNonEmpty(nested.Code, req.Code),
-		Key:         firstNonEmpty(nested.Key, req.Key),
 		ProfileID:   firstNonEmpty(nested.ProfileID, req.ProfileID),
 		ProfileName: firstNonEmpty(nested.ProfileName, req.ProfileName),
-		Keywords:    appendSelectorTerms(nil, "", nested.Keywords, nested.Keyword, req.Keyword, req.Keywords),
 		Tags:        appendSelectorTerms(nil, nested.Tag, nested.Tags, req.Tag, req.Tags),
 		GroupID:     firstNonEmpty(nested.GroupID, req.GroupID),
 		MatchMode:   firstNonEmpty(nested.MatchMode, req.MatchMode),
@@ -49,8 +44,6 @@ func mergeLaunchSelector(req LaunchRequest) LaunchSelector {
 
 func normalizeLaunchSelector(selector LaunchSelector) LaunchSelector {
 	selector.Code = normalizeCode(selector.Code)
-	selector.Key = strings.TrimSpace(selector.Key)
-	selector.Keywords = normalizeSelectorTerms(appendSelectorTerms(nil, "", selector.Keywords, selector.Keyword))
 	selector.Tags = normalizeSelectorTerms(appendSelectorTerms(nil, selector.Tag, selector.Tags))
 	selector.ProfileID = strings.TrimSpace(selector.ProfileID)
 	selector.ProfileName = strings.TrimSpace(selector.ProfileName)
@@ -59,28 +52,23 @@ func normalizeLaunchSelector(selector LaunchSelector) LaunchSelector {
 	if selector.MatchMode == "" {
 		selector.MatchMode = defaultLaunchMatchMode(selector)
 	}
-	selector.Keyword = ""
 	selector.Tag = ""
 	return selector
 }
 
 func (selector LaunchSelector) IsEmpty() bool {
 	return selector.Code == "" &&
-		selector.Key == "" &&
 		selector.ProfileID == "" &&
 		selector.ProfileName == "" &&
 		selector.GroupID == "" &&
-		len(selector.Keywords) == 0 &&
 		len(selector.Tags) == 0
 }
 
 func (selector LaunchSelector) OnlyCode() bool {
 	return selector.Code != "" &&
-		selector.Key == "" &&
 		selector.ProfileID == "" &&
 		selector.ProfileName == "" &&
 		selector.GroupID == "" &&
-		len(selector.Keywords) == 0 &&
 		len(selector.Tags) == 0
 }
 
@@ -94,7 +82,7 @@ func (selector LaunchSelector) Validate() error {
 }
 
 func defaultLaunchMatchMode(selector LaunchSelector) string {
-	if selector.Code != "" || selector.Key != "" || len(selector.Keywords) > 0 {
+	if selector.Code != "" {
 		return launchMatchModeFirst
 	}
 	return launchMatchModeUnique
@@ -152,24 +140,6 @@ func (s *LaunchServer) findProfilesBySelector(selector LaunchSelector) ([]browse
 	if len(selector.Tags) > 0 {
 		snapshots = filterProfiles(snapshots, func(item browser.Profile) bool {
 			return profileHasAllTags(item, selector.Tags)
-		})
-	}
-
-	fuzzyQueries := selector.Keywords
-	if selector.Key != "" {
-		exactMatches := filterProfiles(snapshots, func(item browser.Profile) bool {
-			return profileHasExactKeyword(item, selector.Key)
-		})
-		if len(exactMatches) > 0 {
-			snapshots = exactMatches
-		} else {
-			fuzzyQueries = normalizeSelectorTerms(append([]string{selector.Key}, fuzzyQueries...))
-		}
-	}
-
-	if len(fuzzyQueries) > 0 {
-		snapshots = filterProfiles(snapshots, func(item browser.Profile) bool {
-			return profileMatchesAllKeywordQueries(item, fuzzyQueries)
 		})
 	}
 
@@ -253,44 +223,6 @@ func profileHasAllTags(profile browser.Profile, required []string) bool {
 	return true
 }
 
-func profileHasExactKeyword(profile browser.Profile, expected string) bool {
-	expected = strings.TrimSpace(expected)
-	if expected == "" || len(profile.Keywords) == 0 {
-		return false
-	}
-
-	for _, keyword := range profile.Keywords {
-		if strings.EqualFold(strings.TrimSpace(keyword), expected) {
-			return true
-		}
-	}
-	return false
-}
-
-func profileMatchesAllKeywordQueries(profile browser.Profile, queries []string) bool {
-	if len(queries) == 0 {
-		return true
-	}
-	if len(profile.Keywords) == 0 {
-		return false
-	}
-
-	for _, query := range queries {
-		queryLower := strings.ToLower(query)
-		found := false
-		for _, keyword := range profile.Keywords {
-			if strings.Contains(strings.ToLower(strings.TrimSpace(keyword)), queryLower) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
-}
-
 func sortProfilesForSelector(items []browser.Profile) {
 	sort.Slice(items, func(i, j int) bool {
 		leftName := strings.ToLower(strings.TrimSpace(items[i].ProfileName))
@@ -320,7 +252,7 @@ func buildAmbiguousSelectorError(items []browser.Profile) string {
 	if len(items) > maxPreview {
 		suffix = fmt.Sprintf(" ... and %d more", len(items)-maxPreview)
 	}
-	return fmt.Sprintf("selector matched %d profiles: %s%s; use code/profileId or add groupId/tags/keywords, or set matchMode=first", len(items), strings.Join(parts, ", "), suffix)
+	return fmt.Sprintf("selector matched %d profiles: %s%s; use code/profileId or add groupId/tags, or set matchMode=first", len(items), strings.Join(parts, ", "), suffix)
 }
 
 func appendSelectorTerms(dst []string, single string, many []string, moreSinglesAndSlices ...interface{}) []string {
