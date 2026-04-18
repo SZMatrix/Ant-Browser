@@ -41,6 +41,10 @@ func TestResolveReadOnlyLinuxInstallUsesUserDataRoot(t *testing.T) {
 }
 
 func TestResolveDarwinAppBundleUsesApplicationSupportStateRoot(t *testing.T) {
+	if goruntime.GOOS != "darwin" {
+		t.Skip("darwin-only path behavior")
+	}
+
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
@@ -111,6 +115,10 @@ func TestEnsureWritableLayoutSeedsConfigAndChrome(t *testing.T) {
 }
 
 func TestEnsureWritableLayoutSeedsDarwinBundleStateRoot(t *testing.T) {
+	if goruntime.GOOS != "darwin" {
+		t.Skip("darwin-only path behavior")
+	}
+
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
