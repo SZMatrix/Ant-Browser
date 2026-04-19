@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, CheckCircle, ChevronRight, ChevronUp, Copy, Edit2, ExternalLink, FileText, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, Gift, LayoutGrid, List } from 'lucide-react'
+import { Activity, AlertTriangle, CheckCircle, ChevronRight, ChevronUp, Copy, Edit2, ExternalLink, FileText, Pencil, Play, Plus, RefreshCw, RotateCcw, Settings, Sliders, Square, Star, Trash2, XCircle, Gift, LayoutGrid, List } from 'lucide-react'
 import { Badge, Button, Card, FormItem, Input, Modal, StatCard, Table, Textarea, toast } from '../../../shared/components'
 import { fetchDashboardStats, redeemCDKey, redeemGithubStar, reloadConfig } from '../../dashboard/api'
 import type { TableColumn } from '../../../shared/components/Table'
@@ -219,6 +219,19 @@ export function BrowserListPage() {
     setCopyModal({ open: false, profile: null })
     setCopyName('')
   }
+
+  // 删除实例弹窗
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; profile: BrowserProfile | null }>({ open: false, profile: null })
+  const [deleting, setDeleting] = useState(false)
+
+  const openDeleteModal = (profile: BrowserProfile) => setDeleteModal({ open: true, profile })
+  const closeDeleteModal = () => {
+    if (deleting) return
+    setDeleteModal({ open: false, profile: null })
+  }
+
+  // 批量删除弹窗
+  const [batchDeleteModal, setBatchDeleteModal] = useState(false)
 
   // 基础配置弹窗
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
@@ -544,10 +557,32 @@ export function BrowserListPage() {
     }
   }
 
-  const handleDelete = async (profileId: string) => {
-    await deleteBrowserProfile(profileId)
-    toast.success('配置已删除')
-    loadProfiles()
+  const handleConfirmDelete = async () => {
+    const profile = deleteModal.profile
+    if (!profile) return
+    setDeleting(true)
+    try {
+      if (profile.running) {
+        updatePendingIds(setStoppingIds, profile.profileId, true)
+        try {
+          const stopped = await stopBrowserInstance(profile.profileId)
+          mergeProfileState(stopped)
+        } catch (error: any) {
+          toast.error(resolveActionErrorMessage(error, '停止实例失败，无法删除'))
+          return
+        } finally {
+          updatePendingIds(setStoppingIds, profile.profileId, false)
+        }
+      }
+      await deleteBrowserProfile(profile.profileId)
+      toast.success('实例已删除，本地数据已清理')
+      setDeleteModal({ open: false, profile: null })
+      loadProfiles()
+    } catch (error: any) {
+      toast.error(resolveActionErrorMessage(error, '删除失败'))
+    } finally {
+      setDeleting(false)
+    }
   }
 
   // 批量操作
@@ -637,17 +672,51 @@ export function BrowserListPage() {
     loadProfiles()
   }
 
-  const handleBatchDelete = async () => {
+  const handleBatchDelete = () => {
+    if (selectedIds.size === 0) return
+    setBatchDeleteModal(true)
+  }
+
+  const handleConfirmBatchDelete = async () => {
     const ids = Array.from(selectedIds)
     if (ids.length === 0) return
-    if (!confirm(`确定删除选中的 ${ids.length} 个实例？`)) return
     setBatchLoading(true)
+    let stopped = 0, deleted = 0, stopFailed = 0, deleteFailed = 0
     for (const id of ids) {
-      await deleteBrowserProfile(id)
+      const profile = profiles.find(p => p.profileId === id)
+      if (!profile) continue
+      if (profile.running) {
+        updatePendingIds(setStoppingIds, id, true)
+        try {
+          const result = await stopBrowserInstance(id)
+          mergeProfileState(result)
+          stopped++
+        } catch {
+          stopFailed++
+          updatePendingIds(setStoppingIds, id, false)
+          continue
+        }
+        updatePendingIds(setStoppingIds, id, false)
+      }
+      try {
+        await deleteBrowserProfile(id)
+        deleted++
+      } catch {
+        deleteFailed++
+      }
     }
     setBatchLoading(false)
+    setBatchDeleteModal(false)
     setSelectedIds(new Set())
-    toast.success(`已删除 ${ids.length} 个实例`)
+    const parts = [`删除 ${deleted}`]
+    if (stopped > 0) parts.unshift(`停止 ${stopped}`)
+    if (stopFailed > 0) parts.push(`停止失败 ${stopFailed}`)
+    if (deleteFailed > 0) parts.push(`删除失败 ${deleteFailed}`)
+    if (stopFailed > 0 || deleteFailed > 0) {
+      toast.warning(`批量操作完成：${parts.join('，')}`)
+    } else {
+      toast.success(`批量操作完成：${parts.join('，')}`)
+    }
     loadProfiles()
   }
 
@@ -870,10 +939,12 @@ export function BrowserListPage() {
                 {!isStarting && <Play className="w-3.5 h-3.5 fill-current" />}
               </Button>
             )}
-            <Button size="sm" variant="ghost" onClick={() => handleRestart(record.profileId)} title="重启" disabled={isBusy}><RotateCcw className="w-3.5 h-3.5" /></Button>
+            {record.running && (
+              <Button size="sm" variant="ghost" onClick={() => handleRestart(record.profileId)} title="重启" disabled={isBusy}><RotateCcw className="w-3.5 h-3.5" /></Button>
+            )}
             <Link to={`/browser/edit/${record.profileId}`}><Button size="sm" variant="ghost" title="配置" disabled={isBusy}><Settings className="w-3.5 h-3.5" /></Button></Link>
             <Button size="sm" variant="ghost" onClick={() => openCopyModal(record)} title="克隆" disabled={isBusy}><Copy className="w-3.5 h-3.5" /></Button>
-            <Button size="sm" variant="ghost" onClick={() => handleDelete(record.profileId)} title="删除" disabled={isBusy}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>
+            <Button size="sm" variant="ghost" onClick={() => openDeleteModal(record)} title="删除" disabled={isBusy}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>
           </div>
         )
       },
@@ -1048,10 +1119,12 @@ export function BrowserListPage() {
                           </Button>
                         )}
                         <span className="w-px h-4 bg-[var(--color-border-muted)] mx-1"></span>
-                        <Button size="sm" variant="ghost" onClick={() => handleRestart(record.profileId)} title="重启" className="px-3" disabled={isBusy}><RotateCcw className="w-4 h-4 mr-1.5" />重启</Button>
+                        {record.running && (
+                          <Button size="sm" variant="ghost" onClick={() => handleRestart(record.profileId)} title="重启" className="px-3" disabled={isBusy}><RotateCcw className="w-4 h-4 mr-1.5" />重启</Button>
+                        )}
                         <Link to={`/browser/edit/${record.profileId}`}><Button size="sm" variant="ghost" title="配置" className="px-3" disabled={isBusy}><Settings className="w-4 h-4 mr-1.5" />配置</Button></Link>
                         <Button size="sm" variant="ghost" onClick={() => openCopyModal(record)} title="克隆" className="px-3" disabled={isBusy}><Copy className="w-4 h-4 mr-1.5" />克隆</Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDelete(record.profileId)} title="删除" className="px-3 text-red-500 hover:text-red-600 hover:bg-red-50" disabled={isBusy}><Trash2 className="w-4 h-4 mr-1.5" />删除</Button>
+                        <Button size="sm" variant="ghost" onClick={() => openDeleteModal(record)} title="删除" className="px-3 text-red-500 hover:text-red-600 hover:bg-red-50" disabled={isBusy}><Trash2 className="w-4 h-4 mr-1.5" />删除</Button>
                       </div>
                     </div>
 
@@ -1243,6 +1316,73 @@ export function BrowserListPage() {
               </button>
             </div>
           </div>
+        </div>
+      </Modal>
+
+      {/* 删除实例弹窗 */}
+      <Modal
+        open={deleteModal.open}
+        onClose={closeDeleteModal}
+        title={deleteModal.profile?.running ? '停止并删除实例' : '删除实例'}
+        width="420px"
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeDeleteModal} disabled={deleting}>取消</Button>
+            <Button onClick={handleConfirmDelete} loading={deleting} className="bg-red-500 hover:bg-red-600">
+              {deleteModal.profile?.running ? '停止并删除' : '确认删除'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+            <div className="text-sm text-[var(--color-text-primary)]">
+              {deleteModal.profile?.running ? (
+                <>
+                  实例 <span className="font-medium">{deleteModal.profile?.profileName}</span> 正在运行中。
+                  是否确定<span className="font-medium">停止并删除</span>该实例？停止成功后再执行删除。
+                </>
+              ) : (
+                <>确定要删除实例 <span className="font-medium">{deleteModal.profile?.profileName}</span> 吗？</>
+              )}
+            </div>
+          </div>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            删除后将同步清理该实例的本地用户数据（Cookie、缓存、登录状态等），操作不可恢复。
+          </p>
+        </div>
+      </Modal>
+
+      {/* 批量删除弹窗 */}
+      <Modal
+        open={batchDeleteModal}
+        onClose={() => { if (!batchLoading) setBatchDeleteModal(false) }}
+        title="批量删除实例"
+        width="420px"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setBatchDeleteModal(false)} disabled={batchLoading}>取消</Button>
+            <Button onClick={handleConfirmBatchDelete} loading={batchLoading} className="bg-red-500 hover:bg-red-600">
+              确认删除
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+            <div className="text-sm text-[var(--color-text-primary)]">
+              即将删除 <span className="font-medium">{selectedIds.size}</span> 个实例
+              {(() => {
+                const runningCount = Array.from(selectedIds).filter(id => profiles.find(p => p.profileId === id)?.running).length
+                return runningCount > 0 ? <>，其中 <span className="font-medium">{runningCount}</span> 个正在运行，将先停止再删除。</> : '。'
+              })()}
+            </div>
+          </div>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            删除后将同步清理这些实例的本地用户数据，操作不可恢复。
+          </p>
         </div>
       </Modal>
 

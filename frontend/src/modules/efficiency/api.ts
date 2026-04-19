@@ -1,7 +1,6 @@
 import type {
   ExtensionView,
   ExtensionMetadata,
-  ExtensionChangeResult,
   ExtensionScope,
 } from './types'
 
@@ -13,6 +12,12 @@ export async function listExtensions(): Promise<ExtensionView[]> {
   const b = await bindings()
   if (b?.ExtensionList) return (await b.ExtensionList()) || []
   return []
+}
+
+export async function getExtension(id: string): Promise<ExtensionView | null> {
+  const b = await bindings()
+  if (!b?.ExtensionGet) return null
+  try { return await b.ExtensionGet(id) } catch { return null }
 }
 
 export async function identifyFromLocal(path = ''): Promise<ExtensionMetadata | null> {
@@ -41,12 +46,12 @@ export async function retryInstall(id: string): Promise<void> {
   if (b?.ExtensionRetryInstall) await b.ExtensionRetryInstall(id)
 }
 
-export async function setEnabled(id: string, enabled: boolean): Promise<ExtensionChangeResult> {
+export async function setEnabled(id: string, enabled: boolean): Promise<ExtensionView> {
   const b = await bindings()
   return await b.ExtensionSetEnabled(id, enabled)
 }
 
-export async function updateScope(id: string, scope: ExtensionScope): Promise<ExtensionChangeResult> {
+export async function updateScope(id: string, scope: ExtensionScope): Promise<ExtensionView> {
   const b = await bindings()
   return await b.ExtensionUpdateScope(id, scope)
 }
@@ -56,13 +61,7 @@ export async function renameExtension(id: string, name: string): Promise<void> {
   if (b?.ExtensionRename) await b.ExtensionRename(id, name)
 }
 
-export async function deleteExtension(id: string): Promise<ExtensionChangeResult> {
+export async function deleteExtension(id: string): Promise<ExtensionView> {
   const b = await bindings()
   return await b.ExtensionDelete(id)
-}
-
-export async function getPendingRestarts(): Promise<Record<string, string[]>> {
-  const b = await bindings()
-  if (b?.ExtensionGetPendingRestarts) return (await b.ExtensionGetPendingRestarts()) || {}
-  return {}
 }

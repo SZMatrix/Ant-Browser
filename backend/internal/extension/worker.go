@@ -17,11 +17,16 @@ type InstallEventEmitter func()
 // InstallWorker runs extension installs in background goroutines and emits
 // an `extensions:changed` Wails event each time a row's status transitions.
 type InstallWorker struct {
-	paths   Paths
-	store   *SQLiteStore
-	emit    InstallEventEmitter
-	mu      sync.Mutex
-	running map[string]context.CancelFunc // extensionID → cancel (reserved for future)
+	paths Paths
+	store *SQLiteStore
+	emit  InstallEventEmitter
+	// OnInstallSucceeded is an optional post-success hook. Called after the row
+	// flips to 'succeeded' but before emit, so consumers (e.g. CDP live-sync)
+	// observe the final DB state. Must be set before the first Kick();
+	// the worker does not lock around reads.
+	OnInstallSucceeded func(extID string)
+	mu                 sync.Mutex
+	running            map[string]context.CancelFunc // extensionID → cancel (reserved for future)
 }
 
 func NewInstallWorker(store *SQLiteStore, paths Paths, emit InstallEventEmitter) *InstallWorker {
@@ -51,6 +56,9 @@ func (w *InstallWorker) Kick(extID string, meta Metadata) {
 			w.markFailed(extID, err.Error())
 		} else {
 			w.markSucceeded(extID)
+			if w.OnInstallSucceeded != nil {
+				w.OnInstallSucceeded(extID)
+			}
 		}
 		if w.emit != nil {
 			w.emit()

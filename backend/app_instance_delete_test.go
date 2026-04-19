@@ -21,7 +21,6 @@ func TestBrowserProfileDeletePrunesExtensionScopes(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	app.extMgr.Tracker.Mark("ext-b", p.ProfileId)
 
 	if err := app.BrowserProfileDelete(p.ProfileId); err != nil {
 		t.Fatal(err)
@@ -30,9 +29,5 @@ func TestBrowserProfileDeletePrunesExtensionScopes(t *testing.T) {
 	ext, _ := app.extMgr.Store.GetByID("ext-b")
 	if len(ext.Scope.IDs) != 1 || ext.Scope.IDs[0] != "other" {
 		t.Fatalf("scope after prune: %+v", ext.Scope)
-	}
-	snap := app.extMgr.Tracker.Snapshot()
-	if len(snap["ext-b"]) != 0 {
-		t.Fatalf("tracker should have cleared profile from ext-b: %+v", snap)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"ant-chrome/backend/internal/logger"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -337,28 +338,44 @@ func (m *Manager) Delete(profileId string) error {
 	log := logger.New("Browser")
 	m.InitData()
 	m.Mutex.Lock()
-	defer m.Mutex.Unlock()
-	if _, exists := m.Profiles[profileId]; !exists {
+	profile, exists := m.Profiles[profileId]
+	if !exists {
+		m.Mutex.Unlock()
 		log.Error("浏览器配置不存在", logger.F("profile_id", profileId))
 		return fmt.Errorf("profile not found")
 	}
+	if profile.Running {
+		m.Mutex.Unlock()
+		return fmt.Errorf("running profile cannot be deleted")
+	}
+	userDataDir := m.ResolveUserDataDir(profile)
 	delete(m.Profiles, profileId)
 	log.Info("浏览器配置删除", logger.F("profile_id", profileId))
 
-	// DAO 删除
 	if m.ProfileDAO != nil {
 		if err := m.ProfileDAO.Delete(profileId); err != nil {
+			m.Mutex.Unlock()
 			log.Error("数据库删除实例失败", logger.F("profile_id", profileId), logger.F("error", err))
 			return err
 		}
 	} else {
 		if err := m.SaveProfiles(); err != nil {
+			m.Mutex.Unlock()
 			return err
 		}
 	}
+	m.Mutex.Unlock()
 
 	if m.CodeProvider != nil {
 		_ = m.CodeProvider.Remove(profileId)
+	}
+
+	if strings.TrimSpace(userDataDir) != "" {
+		if err := os.RemoveAll(userDataDir); err != nil {
+			log.Warn("清理用户数据目录失败", logger.F("path", userDataDir), logger.F("error", err))
+		} else {
+			log.Info("已清理用户数据目录", logger.F("path", userDataDir))
+		}
 	}
 	return nil
 }

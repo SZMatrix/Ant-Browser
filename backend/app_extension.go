@@ -13,7 +13,6 @@ import (
 
 type ExtensionView = extension.ExtensionView
 type ExtensionMetadata = extension.Metadata
-type ExtensionChangeResult = extension.ExtensionChangeResult
 type ExtensionScope = extension.Scope
 
 func (a *App) ExtensionList() ([]*ExtensionView, error) {
@@ -100,6 +99,14 @@ func (a *App) ExtensionIdentifyFromStore(storeURL string) (*ExtensionMetadata, e
 
 // ExtensionCreateInstalling inserts the row synchronously and kicks a
 // background install. The returned view has installStatus='installing'.
+//
+// If an extension with the same chromeID already exists, the existing row is
+// promoted back to 'installing' and reinstalled in place. This collapses the
+// duplicate add-flow into an overwrite-update instead of piling up separate
+// rows for the same underlying extension.
+//
+// Live-sync to running instances is deferred to the worker's OnInstallSucceeded
+// hook (see tryLiveSyncForInstalledExtension), since install is async.
 func (a *App) ExtensionCreateInstalling(meta extension.Metadata, scope ExtensionScope, overrideName string) (*ExtensionView, error) {
 	if a.extMgr == nil {
 		return nil, fmt.Errorf("extension manager not ready")
@@ -107,9 +114,23 @@ func (a *App) ExtensionCreateInstalling(meta extension.Metadata, scope Extension
 	if a.extMgr.Worker == nil {
 		return nil, fmt.Errorf("install worker not ready")
 	}
-	ext, err := a.extMgr.Installer.CreatePlaceholder(a.extMgr.Store, meta, scope, overrideName)
-	if err != nil {
-		return nil, err
+	var (
+		ext *extension.Extension
+		err error
+	)
+	if meta.ChromeID != "" {
+		if dupID, ferr := a.extMgr.Store.FindByChromeID(meta.ChromeID); ferr == nil && dupID != "" {
+			ext, err = a.extMgr.Installer.PromoteToReinstall(a.extMgr.Store, dupID, meta, scope, overrideName)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if ext == nil {
+		ext, err = a.extMgr.Installer.CreatePlaceholder(a.extMgr.Store, meta, scope, overrideName)
+		if err != nil {
+			return nil, err
+		}
 	}
 	a.extMgr.Worker.Kick(ext.ExtensionID, meta)
 	validGroups, validProfiles := a.extensionValidIDSets()
@@ -152,7 +173,7 @@ func (a *App) ExtensionRetryInstall(id string) error {
 	return nil
 }
 
-func (a *App) ExtensionSetEnabled(id string, enabled bool) (*ExtensionChangeResult, error) {
+func (a *App) ExtensionSetEnabled(id string, enabled bool) (*ExtensionView, error) {
 	if a.extMgr == nil {
 		return nil, fmt.Errorf("extension manager not ready")
 	}
@@ -170,41 +191,29 @@ func (a *App) ExtensionSetEnabled(id string, enabled bool) (*ExtensionChangeResu
 	if err != nil {
 		return nil, err
 	}
-	targets := a.affectedRunningProfilesForExt(ext)
-	succ := []string{}
-	pending := []string{}
+	// Best-effort live sync; failures are silently ignored by design.
+	// Resolve() short-circuits on !Enabled, which is a launch-time guard that
+	// isn't applicable here — for the disable direction we still need the
+	// scope match to find which running profiles to Unload from.
+	probe := *ext
+	probe.Enabled = true
 	unpacked := filepath.Join(a.extMgr.Paths.ExtensionDir(ext.ExtensionID), "unpacked")
-	kernelSupport := false
-	for _, t := range targets {
-		capab := t.CDP.Capability()
-		if capab.SupportsLoadUnpacked || capab.SupportsUnload {
-			kernelSupport = true
-		}
+	for _, t := range a.affectedRunningProfilesForExt(&probe) {
 		var ok bool
+		var reason string
 		if enabled {
-			ok, _ = t.CDP.LoadUnpacked(unpacked)
+			ok, reason = t.CDP.LoadUnpacked(unpacked)
+			logCDPSync("SetEnabled:load", t, "Extensions.loadUnpacked", ok, reason)
 		} else {
-			ok, _ = t.CDP.Unload(ext.ChromeID)
-		}
-		if ok {
-			succ = append(succ, t.ProfileID)
-			a.extMgr.Tracker.ClearProfile(t.ProfileID)
-		} else {
-			pending = append(pending, t.ProfileID)
-			a.extMgr.Tracker.Mark(ext.ExtensionID, t.ProfileID)
+			ok, reason = t.CDP.Unload(ext.ChromeID)
+			logCDPSync("SetEnabled:unload", t, "Extensions.unload", ok, reason)
 		}
 	}
 	validGroups, validProfiles := a.extensionValidIDSets()
-	return &ExtensionChangeResult{
-		Extension:            a.extMgr.BuildView(ext, validGroups, validProfiles),
-		AffectedProfileIDs:   collectAffectedIDs(targets),
-		CDPSucceededIDs:      succ,
-		PendingRestartIDs:    pending,
-		CDPSupportedByKernel: kernelSupport,
-	}, nil
+	return a.extMgr.BuildView(ext, validGroups, validProfiles), nil
 }
 
-func (a *App) ExtensionUpdateScope(id string, scope ExtensionScope) (*ExtensionChangeResult, error) {
+func (a *App) ExtensionUpdateScope(id string, scope ExtensionScope) (*ExtensionView, error) {
 	if a.extMgr == nil {
 		return nil, fmt.Errorf("extension manager not ready")
 	}
@@ -217,17 +226,22 @@ func (a *App) ExtensionUpdateScope(id string, scope ExtensionScope) (*ExtensionC
 	}
 
 	validGroups, validProfiles := a.extensionValidIDSets()
-	ref := validProfiles
-	if scope.Kind == extension.ScopeKindGroups {
-		ref = validGroups
-	}
-	cleaned := make([]string, 0, len(scope.IDs))
-	for _, sid := range scope.IDs {
-		if _, ok := ref[sid]; ok {
-			cleaned = append(cleaned, sid)
+	if scope.Kind == extension.ScopeKindAll {
+		// 'all' ignores IDs entirely; store a canonical empty slice.
+		scope.IDs = []string{}
+	} else {
+		ref := validProfiles
+		if scope.Kind == extension.ScopeKindGroups {
+			ref = validGroups
 		}
+		cleaned := make([]string, 0, len(scope.IDs))
+		for _, sid := range scope.IDs {
+			if _, ok := ref[sid]; ok {
+				cleaned = append(cleaned, sid)
+			}
+		}
+		scope.IDs = cleaned
 	}
-	scope.IDs = cleaned
 	if err := a.extMgr.Store.UpdateScope(id, scope); err != nil {
 		return nil, err
 	}
@@ -236,6 +250,8 @@ func (a *App) ExtensionUpdateScope(id string, scope ExtensionScope) (*ExtensionC
 		return nil, err
 	}
 
+	// Diff old/new affected profiles: newly-included → LoadUnpacked;
+	// newly-excluded → Unload. All CDP calls are best-effort.
 	oldTargets := a.affectedRunningProfilesForExt(old)
 	newTargets := a.affectedRunningProfilesForExt(updated)
 	oldSet := map[string]struct{}{}
@@ -247,52 +263,23 @@ func (a *App) ExtensionUpdateScope(id string, scope ExtensionScope) (*ExtensionC
 		newSet[t.ProfileID] = struct{}{}
 	}
 
-	succ := []string{}
-	pending := []string{}
 	unpacked := filepath.Join(a.extMgr.Paths.ExtensionDir(id), "unpacked")
-	kernelSupport := false
-
 	for _, t := range newTargets {
 		if _, was := oldSet[t.ProfileID]; was {
 			continue
 		}
-		capab := t.CDP.Capability()
-		if capab.SupportsLoadUnpacked || capab.SupportsUnload {
-			kernelSupport = true
-		}
-		if ok, _ := t.CDP.LoadUnpacked(unpacked); ok {
-			succ = append(succ, t.ProfileID)
-			a.extMgr.Tracker.ClearProfile(t.ProfileID)
-		} else {
-			pending = append(pending, t.ProfileID)
-			a.extMgr.Tracker.Mark(id, t.ProfileID)
-		}
+		ok, reason := t.CDP.LoadUnpacked(unpacked)
+		logCDPSync("UpdateScope:load", t, "Extensions.loadUnpacked", ok, reason)
 	}
 	for _, t := range oldTargets {
 		if _, still := newSet[t.ProfileID]; still {
 			continue
 		}
-		capab := t.CDP.Capability()
-		if capab.SupportsLoadUnpacked || capab.SupportsUnload {
-			kernelSupport = true
-		}
-		if ok, _ := t.CDP.Unload(updated.ChromeID); ok {
-			succ = append(succ, t.ProfileID)
-			a.extMgr.Tracker.ClearProfile(t.ProfileID)
-		} else {
-			pending = append(pending, t.ProfileID)
-			a.extMgr.Tracker.Mark(id, t.ProfileID)
-		}
+		ok, reason := t.CDP.Unload(updated.ChromeID)
+		logCDPSync("UpdateScope:unload", t, "Extensions.unload", ok, reason)
 	}
 
-	affected := collectAffectedIDs(newTargets)
-	return &ExtensionChangeResult{
-		Extension:            a.extMgr.BuildView(updated, validGroups, validProfiles),
-		AffectedProfileIDs:   affected,
-		CDPSucceededIDs:      succ,
-		PendingRestartIDs:    pending,
-		CDPSupportedByKernel: kernelSupport,
-	}, nil
+	return a.extMgr.BuildView(updated, validGroups, validProfiles), nil
 }
 
 func (a *App) ExtensionRename(id, name string) error {
@@ -309,7 +296,7 @@ func (a *App) ExtensionRename(id, name string) error {
 	return a.extMgr.Store.Rename(id, strings.TrimSpace(name))
 }
 
-func (a *App) ExtensionDelete(id string) (*ExtensionChangeResult, error) {
+func (a *App) ExtensionDelete(id string) (*ExtensionView, error) {
 	log := logger.New("Extension")
 	if a.extMgr == nil {
 		return nil, fmt.Errorf("extension manager not ready")
@@ -329,38 +316,34 @@ func (a *App) ExtensionDelete(id string) (*ExtensionChangeResult, error) {
 	if err := os.RemoveAll(a.extMgr.Paths.ExtensionDir(id)); err != nil {
 		log.Warn("删除扩展目录失败", logger.F("extension_id", id), logger.F("error", err))
 	}
-	a.extMgr.Tracker.ClearExtension(id)
 
-	succ := []string{}
-	pending := []string{}
-	kernelSupport := false
 	for _, t := range targets {
-		capab := t.CDP.Capability()
-		if capab.SupportsLoadUnpacked || capab.SupportsUnload {
-			kernelSupport = true
-		}
-		if ok, _ := t.CDP.Unload(ext.ChromeID); ok {
-			succ = append(succ, t.ProfileID)
-		} else {
-			pending = append(pending, t.ProfileID)
-		}
+		ok, reason := t.CDP.Unload(ext.ChromeID)
+		logCDPSync("Delete:unload", t, "Extensions.unload", ok, reason)
 	}
 
 	validGroups, validProfiles := a.extensionValidIDSets()
-	return &ExtensionChangeResult{
-		Extension:            a.extMgr.BuildView(ext, validGroups, validProfiles),
-		AffectedProfileIDs:   collectAffectedIDs(targets),
-		CDPSucceededIDs:      succ,
-		PendingRestartIDs:    pending,
-		CDPSupportedByKernel: kernelSupport,
-	}, nil
+	return a.extMgr.BuildView(ext, validGroups, validProfiles), nil
 }
 
-func (a *App) ExtensionGetPendingRestarts() (map[string][]string, error) {
+// tryLiveSyncForInstalledExtension is invoked by the InstallWorker after a row
+// transitions to 'succeeded'. It is the equivalent of the mutation-handler
+// live-sync paths for newly-installed (or re-installed) extensions: best-effort
+// CDP LoadUnpacked on every currently-running profile whose scope matches.
+// All CDP failures are silently ignored by design.
+func (a *App) tryLiveSyncForInstalledExtension(extID string) {
 	if a.extMgr == nil {
-		return nil, fmt.Errorf("extension manager not ready")
+		return
 	}
-	return a.extMgr.Tracker.Snapshot(), nil
+	ext, err := a.extMgr.Store.GetByID(extID)
+	if err != nil || ext == nil || !ext.Enabled {
+		return
+	}
+	unpacked := filepath.Join(a.extMgr.Paths.ExtensionDir(extID), "unpacked")
+	for _, t := range a.affectedRunningProfilesForExt(ext) {
+		ok, reason := t.CDP.LoadUnpacked(unpacked)
+		logCDPSync("InstallComplete:load", t, "Extensions.loadUnpacked", ok, reason)
+	}
 }
 
 func (a *App) extensionValidIDSets() (groups, profiles map[string]struct{}) {
@@ -396,17 +379,39 @@ type affectedProfile struct {
 // affectedRunningProfilesForExt returns the live-CDP-ready targets whose scope
 // resolves for the given extension. Profiles that aren't running / debug-ready
 // are excluded — they'll already pick up the new state on their next start.
+// Emits a DEBUG log with a per-bucket breakdown so "no targets" cases can be
+// diagnosed (scope mismatch vs not running vs debug not ready).
 func (a *App) affectedRunningProfilesForExt(ext *extension.Extension) []affectedProfile {
 	if a.browserMgr == nil {
 		return nil
 	}
-	profiles, _ := a.browserMgr.ProfileDAO.List()
+	// Running / DebugReady / DebugPort live only in the in-memory map
+	// (browserMgr.Profiles), never persisted to SQLite. Snapshot under lock
+	// and release before any CDP I/O.
+	a.browserMgr.Mutex.Lock()
+	snapshots := make([]BrowserProfile, 0, len(a.browserMgr.Profiles))
+	for _, p := range a.browserMgr.Profiles {
+		if p == nil {
+			continue
+		}
+		snapshots = append(snapshots, *p)
+	}
+	a.browserMgr.Mutex.Unlock()
+
+	var scopeMatch, notRunning, noDebug []string
 	out := make([]affectedProfile, 0)
-	for _, p := range profiles {
+	for i := range snapshots {
+		p := &snapshots[i]
 		if !extension.Resolve(ext, p) {
 			continue
 		}
-		if !p.Running || !p.DebugReady || p.DebugPort == 0 {
+		scopeMatch = append(scopeMatch, p.ProfileId)
+		if !p.Running {
+			notRunning = append(notRunning, p.ProfileId)
+			continue
+		}
+		if !p.DebugReady || p.DebugPort == 0 {
+			noDebug = append(noDebug, p.ProfileId)
 			continue
 		}
 		out = append(out, affectedProfile{
@@ -416,13 +421,31 @@ func (a *App) affectedRunningProfilesForExt(ext *extension.Extension) []affected
 			CDP:       extension.NewCDPClient(p.DebugPort, p.CoreId),
 		})
 	}
+	logger.New("ExtCDP").Debug("affected running profiles",
+		logger.F("extension_id", ext.ExtensionID),
+		logger.F("scope_kind", ext.Scope.Kind),
+		logger.F("scope_ids", ext.Scope.IDs),
+		logger.F("total_profiles", len(snapshots)),
+		logger.F("scope_match", scopeMatch),
+		logger.F("not_running", notRunning),
+		logger.F("no_debug", noDebug),
+		logger.F("ready_targets", len(out)),
+	)
 	return out
 }
 
-func collectAffectedIDs(ts []affectedProfile) []string {
-	out := make([]string, 0, len(ts))
-	for _, t := range ts {
-		out = append(out, t.ProfileID)
-	}
-	return out
+// logCDPSync emits a per-target debug log for a live-sync CDP invocation.
+// Captures kernel capability + call outcome so silent-fail cases can be traced.
+func logCDPSync(op string, t affectedProfile, method string, ok bool, reason string) {
+	cap := t.CDP.Capability()
+	logger.New("ExtCDP").Debug(op,
+		logger.F("profile_id", t.ProfileID),
+		logger.F("debug_port", t.DebugPort),
+		logger.F("method", method),
+		logger.F("supports_load_unpacked", cap.SupportsLoadUnpacked),
+		logger.F("supports_unload", cap.SupportsUnload),
+		logger.F("probe_error", cap.ProbeError),
+		logger.F("ok", ok),
+		logger.F("reason", reason),
+	)
 }

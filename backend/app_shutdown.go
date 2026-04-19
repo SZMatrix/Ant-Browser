@@ -16,6 +16,14 @@ type browserProcessSnapshot struct {
 
 func (a *App) stopRuntimeServices() {
 	a.stopServicesOnce.Do(func() {
+		// 保证 shutdown() 中用 stopServicesDone 等待的分支能及时解除阻塞，
+		// 即使下面的某一步清理耗时过长或 panic。
+		defer func() {
+			if a.stopServicesDone != nil {
+				close(a.stopServicesDone)
+			}
+		}()
+
 		log := logger.New("App")
 
 		a.stopAllBrowserProcessesForExit(log)

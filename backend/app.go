@@ -57,6 +57,7 @@ type App struct {
 	xrayBridgeRefs  map[string]string
 	authBridgeRefs  map[string]string
 	stopServicesOnce sync.Once
+	stopServicesDone chan struct{} // stopRuntimeServices 完成信号，便于带超时等待
 	finalizeOnce     sync.Once
 }
 
@@ -69,8 +70,9 @@ func NewApp(appRoot string, appVersion ...string) *App {
 	return &App{
 		appRoot:          strings.TrimSpace(appRoot),
 		version:          version,
-		xrayBridgeRefs: make(map[string]string),
-		authBridgeRefs: make(map[string]string),
+		xrayBridgeRefs:   make(map[string]string),
+		authBridgeRefs:   make(map[string]string),
+		stopServicesDone: make(chan struct{}),
 	}
 }
 
@@ -185,7 +187,7 @@ func (a *App) startup(ctx context.Context) {
 	if err := extInstaller.RecoverOnBoot(); err != nil {
 		logger.New("Extension").Error("extension recover on boot failed", logger.F("error", err))
 	}
-	a.extMgr = extension.NewManager(extStore, extInstaller, extension.NewPendingRestartTracker(), extPaths)
+	a.extMgr = extension.NewManager(extStore, extInstaller, extPaths)
 
 	// Flip any rows stuck in 'installing' from a previous run to 'failed'.
 	if stuck, sErr := a.extMgr.Store.ListInstalling(); sErr == nil {
@@ -194,6 +196,7 @@ func (a *App) startup(ctx context.Context) {
 		}
 	}
 	a.extMgr.Worker = extension.NewInstallWorker(a.extMgr.Store, a.extMgr.Paths, extension.DefaultEmitter(a.ctx))
+	a.extMgr.Worker.OnInstallSucceeded = a.tryLiveSyncForInstalledExtension
 
 	// 一次性迁移：若 SQLite 表为空则从旧文件导入
 	a.migrateToSQLite()
@@ -328,7 +331,15 @@ func (a *App) shutdown(ctx context.Context) {
 	log := logger.New("App")
 	if a.shouldStopRuntimeServicesOnShutdown() {
 		log.Info("应用正在关闭...")
-		a.stopRuntimeServices()
+		// 在后台触发一次 stopRuntimeServices（被 sync.Once 保护，不会重复执行），
+		// 然后用 stopServicesDone 信号 + 硬超时等待清理结束，避免个别慢路径
+		// （如 PowerShell 清理残留进程、launchServer.Shutdown）把主线程拖死。
+		go a.stopRuntimeServices()
+		select {
+		case <-a.stopServicesDone:
+		case <-time.After(6 * time.Second):
+			log.Warn("运行时服务关闭超时，强制继续退出流程")
+		}
 	} else {
 		log.Info("应用正在关闭（保留当前已打开的浏览器实例）...")
 	}
@@ -340,9 +351,11 @@ func (a *App) GetInterceptor() *logger.MethodInterceptor {
 }
 
 // ForceQuit 设置强制退出标志并调用 runtime.Quit
+// stopRuntimeServices 放到后台执行，立即返回给前端，避免 RPC 长时间阻塞后
+// 前端 1.2s 超时重复触发 Quit、跟 OnShutdown 形成 Once.Do 互等。
 func (a *App) ForceQuit() {
 	a.setQuitMode(quitModeFull)
-	a.stopRuntimeServices()
+	go a.stopRuntimeServices()
 	if a.ctx != nil {
 		runtime.Quit(a.ctx)
 	}
@@ -585,7 +598,6 @@ func (a *App) BrowserProfileDelete(profileId string) error {
 			logger.New("Browser").Warn("扩展 scope 级联清理失败（已由规范化层兜底）",
 				logger.F("profile_id", profileId), logger.F("error", err))
 		}
-		a.extMgr.Tracker.ClearProfile(profileId)
 	}
 	return nil
 }

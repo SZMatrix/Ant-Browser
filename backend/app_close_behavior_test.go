@@ -6,6 +6,7 @@ import (
 	"context"
 	goruntime "runtime"
 	"testing"
+	"time"
 )
 
 func TestPlatformSupportsTrayCloseFlowForOS(t *testing.T) {
@@ -70,6 +71,13 @@ func TestForceQuitStopsTrackedBrowsers(t *testing.T) {
 	app.browserMgr.BrowserProcesses["profile-1"] = nil
 
 	app.ForceQuit()
+
+	// ForceQuit 现在把 stopRuntimeServices 放到后台执行，等待它发出完成信号后再断言。
+	select {
+	case <-app.stopServicesDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected stopRuntimeServices to finish within 5s")
+	}
 
 	if !app.forceQuit {
 		t.Fatal("expected ForceQuit to set forceQuit")

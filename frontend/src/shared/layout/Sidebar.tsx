@@ -9,10 +9,10 @@ import {
   Monitor,
   Settings,
   Database,
-  ChevronLeft,
-  ChevronRight,
   Layers,
   PieChart,
+  PanelLeftClose,
+  PanelLeftOpen,
   Puzzle,
   Cpu,
   Globe,
@@ -60,37 +60,48 @@ export function Sidebar() {
       {/* Logo */}
       <div className={clsx(
         'h-14 flex items-center border-b border-[var(--color-border-muted)]',
-        sidebarCollapsed ? 'justify-center px-2' : 'px-5'
+        sidebarCollapsed ? 'justify-center px-2' : 'px-5 justify-between gap-2'
       )}>
         {!sidebarCollapsed ? (
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 bg-[var(--color-accent)] flex items-center justify-center">
-              <img 
-                src={logoImage} 
-                alt="应用Logo" 
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  // 图片加载失败时显示首字母
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.parentElement?.classList.add('fallback-logo');
-                }}
-              />
-              <span className="text-xs font-bold text-[var(--color-text-inverse)] hidden fallback-content">
-                {projectConfig.shortName.charAt(0)}
-              </span>
+          <>
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 bg-[var(--color-accent)] flex items-center justify-center">
+                <img
+                  src={logoImage}
+                  alt="应用Logo"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.parentElement?.classList.add('fallback-logo');
+                  }}
+                />
+                <span className="text-xs font-bold text-[var(--color-text-inverse)] hidden fallback-content">
+                  {projectConfig.shortName.charAt(0)}
+                </span>
+              </div>
+              <h2 className="text-base font-semibold text-[var(--color-text-primary)] tracking-tight truncate">
+                {projectConfig.name}
+              </h2>
             </div>
-            <h2 className="text-base font-semibold text-[var(--color-text-primary)] tracking-tight truncate">
-              {projectConfig.name}
-            </h2>
-          </div>
+            <button
+              onClick={toggleSidebar}
+              className="w-7 h-7 flex items-center justify-center shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-accent-muted)] rounded-md transition-colors duration-150"
+              title="收起侧边栏"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          </>
         ) : (
-          <div className="w-8 h-8 rounded-full overflow-hidden bg-[var(--color-accent)] flex items-center justify-center">
-            <img 
-              src={logoImage} 
-              alt="应用Logo" 
-              className="w-full h-full object-cover"
+          <button
+            onClick={toggleSidebar}
+            className="w-8 h-8 rounded-full overflow-hidden bg-[var(--color-accent)] flex items-center justify-center relative group"
+            title="展开侧边栏"
+          >
+            <img
+              src={logoImage}
+              alt="应用Logo"
+              className="w-full h-full object-cover group-hover:opacity-30 transition-opacity"
               onError={(e) => {
-                // 图片加载失败时显示首字母
                 e.currentTarget.style.display = 'none';
                 e.currentTarget.parentElement?.classList.add('fallback-logo');
               }}
@@ -98,7 +109,8 @@ export function Sidebar() {
             <span className="text-xs font-bold text-[var(--color-text-inverse)] hidden fallback-content">
               {projectConfig.shortName.charAt(0)}
             </span>
-          </div>
+            <PanelLeftOpen className="w-4 h-4 text-[var(--color-text-inverse)] absolute opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
         )}
       </div>
 
@@ -143,28 +155,6 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Toggle Button */}
-      <div className="p-3 border-t border-[var(--color-border-muted)]">
-        <button
-          onClick={toggleSidebar}
-          className={clsx(
-            'flex items-center rounded-lg text-[var(--color-text-muted)] hover:bg-[var(--color-accent-muted)] hover:text-[var(--color-text-secondary)] transition-all duration-150',
-            sidebarCollapsed 
-              ? 'justify-center w-10 h-10 mx-auto' 
-              : 'w-full px-3 py-2 gap-3'
-          )}
-          title={sidebarCollapsed ? '展开' : '收起'}
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight className="w-[18px] h-[18px]" />
-          ) : (
-            <>
-              <ChevronLeft className="w-[18px] h-[18px]" />
-              <span className="text-sm">收起侧边栏</span>
-            </>
-          )}
-        </button>
-      </div>
     </aside>
   )
 }

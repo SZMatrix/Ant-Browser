@@ -91,24 +91,33 @@ func IdentifyFromLocal(filePath string) (*Metadata, error) {
 	}, nil
 }
 
-// IdentifyFromStore fetches the Chrome Web Store / Edge Add-ons detail page
-// and parses metadata out of the HTML. No CRX is downloaded.
+// IdentifyFromStore fetches metadata from Chrome Web Store or Edge Add-ons.
+// Chrome is scraped from HTML; Edge uses its public JSON product-details API
+// because its store page is a client-rendered SPA with no server-side metadata.
 func IdentifyFromStore(storeURL string) (*Metadata, error) {
 	vendor, id, err := ParseStoreURL(storeURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrIdentifyFailed, err)
 	}
-
-	pageURL := storeURL
-	if pageURL == "" {
+	if storeURL == "" {
 		return nil, fmt.Errorf("%w: empty url", ErrIdentifyFailed)
 	}
-	body, err := httpGetBody(pageURL, 15000)
+	switch vendor {
+	case VendorEdge:
+		return identifyFromEdgeAPI(storeURL, id)
+	case VendorChrome:
+		return identifyFromChromeHTML(storeURL, id)
+	default:
+		return nil, fmt.Errorf("%w: unsupported vendor", ErrIdentifyFailed)
+	}
+}
+
+func identifyFromChromeHTML(storeURL, id string) (*Metadata, error) {
+	body, err := httpGetBody(storeURL, 15000)
 	if err != nil {
 		return nil, fmt.Errorf("%w: fetch page: %v", ErrIdentifyFailed, err)
 	}
-
-	meta := parseStoreHTML(body, vendor)
+	meta := parseChromeHTML(body, id)
 	name := strings.TrimSpace(meta.Name)
 	if name == "" {
 		name = "未命名扩展"
@@ -117,7 +126,6 @@ func IdentifyFromStore(storeURL string) (*Metadata, error) {
 	if provider == "" {
 		provider = "未知"
 	}
-
 	return &Metadata{
 		ChromeID:    id,
 		Name:        name,
@@ -126,8 +134,64 @@ func IdentifyFromStore(storeURL string) (*Metadata, error) {
 		Version:     meta.Version,
 		IconDataURL: meta.IconDataURL,
 		SourceType:  SourceTypeStore,
-		StoreVendor: vendor,
-		SourceURL:   pageURL,
+		StoreVendor: VendorChrome,
+		SourceURL:   storeURL,
+	}, nil
+}
+
+// The Edge Add-ons page is a client-rendered SPA — server HTML contains no
+// og:* tags or inline data for name/version/developer, so scraping the page
+// yields nothing. The store exposes a JSON endpoint that the SPA itself calls
+// to hydrate the detail view; we call it directly.
+func identifyFromEdgeAPI(storeURL, id string) (*Metadata, error) {
+	apiURL := "https://microsoftedge.microsoft.com/addons/getproductdetailsbycrxid/" + id
+	body, err := httpGetBody(apiURL, 15000)
+	if err != nil {
+		return nil, fmt.Errorf("%w: fetch edge api: %v", ErrIdentifyFailed, err)
+	}
+	var payload struct {
+		Name             string `json:"name"`
+		Developer        string `json:"developer"`
+		Version          string `json:"version"`
+		LogoURL          string `json:"logoUrl"`
+		ShortDescription string `json:"shortDescription"`
+		Description      string `json:"description"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("%w: edge json: %v", ErrIdentifyFailed, err)
+	}
+	name := strings.TrimSpace(payload.Name)
+	if name == "" {
+		name = "未命名扩展"
+	}
+	provider := strings.TrimSpace(payload.Developer)
+	if provider == "" {
+		provider = "未知"
+	}
+	desc := strings.TrimSpace(payload.ShortDescription)
+	if desc == "" {
+		desc = strings.TrimSpace(payload.Description)
+	}
+	iconDataURL := ""
+	if payload.LogoURL != "" {
+		imgURL := payload.LogoURL
+		if strings.HasPrefix(imgURL, "//") {
+			imgURL = "https:" + imgURL
+		}
+		if b, mime, ok := fetchImage(imgURL, 8000); ok {
+			iconDataURL = "data:" + mime + ";base64," + stdEncodeBase64(b)
+		}
+	}
+	return &Metadata{
+		ChromeID:    id,
+		Name:        name,
+		Provider:    provider,
+		Description: desc,
+		Version:     strings.TrimSpace(payload.Version),
+		IconDataURL: iconDataURL,
+		SourceType:  SourceTypeStore,
+		StoreVendor: VendorEdge,
+		SourceURL:   storeURL,
 	}, nil
 }
 
@@ -145,11 +209,11 @@ var (
 	reOGDesc  = regexp.MustCompile(`(?i)<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']`)
 )
 
-func parseStoreHTML(body []byte, vendor StoreVendor) storeScrape {
+func parseChromeHTML(body []byte, id string) storeScrape {
 	s := string(body)
 	out := storeScrape{}
 	if m := reOGTitle.FindStringSubmatch(s); len(m) == 2 {
-		out.Name = stripStoreTitleSuffix(m[1], vendor)
+		out.Name = stripStoreTitleSuffix(m[1], VendorChrome)
 	}
 	if m := reOGDesc.FindStringSubmatch(s); len(m) == 2 {
 		out.Description = m[1]
@@ -159,13 +223,18 @@ func parseStoreHTML(body []byte, vendor StoreVendor) storeScrape {
 			out.IconDataURL = "data:" + mime + ";base64," + stdEncodeBase64(b)
 		}
 	}
-	out.Version = scrapeVersion(s, vendor)
-	out.Provider = scrapeProvider(s, vendor)
+	out.Version = scrapeChromeVersion(s)
+	out.Provider = scrapeChromeProvider(s, id)
 	return out
 }
 
 func stripStoreTitleSuffix(title string, vendor StoreVendor) string {
-	for _, suffix := range []string{" - Chrome Web Store", " - Microsoft Edge Addons", " - Chrome 线上应用店"} {
+	for _, suffix := range []string{
+		" - Chrome Web Store",
+		" - Microsoft Edge Addons",
+		" - Microsoft Edge Add-ons",
+		" - Chrome 线上应用店",
+	} {
 		if strings.HasSuffix(title, suffix) {
 			return strings.TrimSpace(strings.TrimSuffix(title, suffix))
 		}
@@ -174,26 +243,50 @@ func stripStoreTitleSuffix(title string, vendor StoreVendor) string {
 	return strings.TrimSpace(title)
 }
 
-var reVersion = regexp.MustCompile(`"version"\s*:\s*"([0-9][0-9A-Za-z.\-]+)"`)
+var (
+	// Label/value card rendered on the Chrome Web Store detail page.
+	// Matches both English ("Version") and Simplified Chinese ("版本").
+	reVersionLabel = regexp.MustCompile(`>(?:Version|版本)</div>\s*<div[^>]*>\s*([^<]+?)\s*</div>`)
+	// Inline manifest.json in the ds:0 AF_initDataCallback blob is embedded as
+	// a JS string literal, so its JSON quotes arrive escaped as \".
+	reVersionEscapedJSON = regexp.MustCompile(`\\"version\\"\s*:\s*\\"([0-9][0-9A-Za-z.\-]+)\\"`)
+	reVersionJSON        = regexp.MustCompile(`"version"\s*:\s*"([0-9][0-9A-Za-z.\-]+)"`)
+)
 
-func scrapeVersion(body string, _ StoreVendor) string {
-	if m := reVersion.FindStringSubmatch(body); len(m) == 2 {
+func scrapeChromeVersion(body string) string {
+	if m := reVersionLabel.FindStringSubmatch(body); len(m) == 2 {
+		if v := strings.TrimSpace(m[1]); v != "" {
+			return v
+		}
+	}
+	if m := reVersionEscapedJSON.FindStringSubmatch(body); len(m) == 2 {
+		return m[1]
+	}
+	if m := reVersionJSON.FindStringSubmatch(body); len(m) == 2 {
 		return m[1]
 	}
 	return ""
 }
 
-var (
-	reAuthor    = regexp.MustCompile(`"author"\s*:\s*\{[^}]*"name"\s*:\s*"([^"]+)"`)
-	rePublisher = regexp.MustCompile(`"publisher"\s*:\s*"([^"]+)"`)
-)
+// The publisher display name shown next to the extension title lives in the
+// ds:0 inline-data array. We anchor on the known extension id because class
+// names are minified and names are not unique.
+// Array shape: [id, iconURL, name, rating, reviewCount, promoURL, shortDesc, publisher, ...]
+var rePublisherNearTitle = regexp.MustCompile(`<a[^>]*class="[^"]*cJI8ee[^"]*"[^>]*>([^<]+)</a>`)
 
-func scrapeProvider(body string, _ StoreVendor) string {
-	if m := reAuthor.FindStringSubmatch(body); len(m) == 2 {
-		return m[1]
+func scrapeChromeProvider(body, id string) string {
+	if id != "" {
+		pat := `"` + regexp.QuoteMeta(id) + `","[^"]+","[^"]+",[0-9.]+,[0-9]+,"[^"]+","[^"]*","([^"]+)"`
+		if re, err := regexp.Compile(pat); err == nil {
+			if m := re.FindStringSubmatch(body); len(m) == 2 {
+				if v := strings.TrimSpace(m[1]); v != "" {
+					return v
+				}
+			}
+		}
 	}
-	if m := rePublisher.FindStringSubmatch(body); len(m) == 2 {
-		return m[1]
+	if m := rePublisherNearTitle.FindStringSubmatch(body); len(m) == 2 {
+		return strings.TrimSpace(m[1])
 	}
 	return ""
 }

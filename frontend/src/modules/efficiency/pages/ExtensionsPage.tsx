@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus } from 'lucide-react'
-import { Button } from '../../../shared/components'
+import { AlertTriangle, Plus } from 'lucide-react'
+import { Button, Modal } from '../../../shared/components'
 import { listExtensions, deleteExtension, setEnabled } from '../api'
 import type { ExtensionView } from '../types'
 import { ExtensionCard } from '../components/ExtensionCard'
@@ -20,7 +20,9 @@ export function ExtensionsPage() {
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [addOpen, setAddOpen] = useState(false)
-  const [lastCDPSupport, setLastCDPSupport] = useState<Record<string, boolean>>({})
+  const [editing, setEditing] = useState<ExtensionView | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ExtensionView | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [profileNames, setProfileNames] = useState<Record<string, string>>({})
   const [groupNames, setGroupNames] = useState<Record<string, string>>({})
 
@@ -60,15 +62,25 @@ export function ExtensionsPage() {
   }, [exts, query])
 
   const handleToggle = async (id: string, enabled: boolean) => {
-    const res = await setEnabled(id, enabled)
-    setLastCDPSupport((prev) => ({ ...prev, [id]: res.cdpSupportedByKernel }))
+    await setEnabled(id, enabled)
     await reload()
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('删除后磁盘上的扩展目录会被清理，确定继续？')) return
-    await deleteExtension(id)
-    await reload()
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await deleteExtension(deleteTarget.extensionId)
+      setDeleteTarget(null)
+      await reload()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const closeDeleteModal = () => {
+    if (deleting) return
+    setDeleteTarget(null)
   }
 
   return (
@@ -106,11 +118,11 @@ export function ExtensionsPage() {
             <ExtensionCard
               key={ext.extensionId}
               data={ext}
-              cdpSupported={lastCDPSupport[ext.extensionId]}
               profileNames={profileNames}
               groupNames={groupNames}
               onToggle={handleToggle}
-              onDelete={handleDelete}
+              onDelete={setDeleteTarget}
+              onEdit={setEditing}
               onChanged={reload}
             />
           ))}
@@ -127,6 +139,45 @@ export function ExtensionsPage() {
           }}
         />
       )}
+
+      {editing && (
+        <AddExtensionModal
+          open={true}
+          editing={editing}
+          onClose={() => setEditing(null)}
+          onCommitted={async () => {
+            setEditing(null)
+            await reload()
+          }}
+        />
+      )}
+
+      <Modal
+        open={!!deleteTarget}
+        onClose={closeDeleteModal}
+        title="删除扩展"
+        width="420px"
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeDeleteModal} disabled={deleting}>取消</Button>
+            <Button onClick={handleConfirmDelete} loading={deleting} className="bg-red-500 hover:bg-red-600">
+              确认删除
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+            <div className="text-sm text-[var(--color-text-primary)]">
+              确定要删除扩展 <span className="font-medium">{deleteTarget?.name}</span> 吗？
+            </div>
+          </div>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            删除后将同步清理该扩展在磁盘上的目录（已解包的文件、图标等），操作不可恢复。
+          </p>
+        </div>
+      </Modal>
     </div>
   )
 }

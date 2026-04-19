@@ -15,6 +15,8 @@ func Resolve(ext *Extension, profile *browser.Profile) bool {
 		return false
 	}
 	switch ext.Scope.Kind {
+	case ScopeKindAll:
+		return true
 	case ScopeKindInstances:
 		return slices.Contains(ext.Scope.IDs, profile.ProfileId)
 	case ScopeKindGroups:

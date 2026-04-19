@@ -7,6 +7,9 @@ type ScopeKind string
 const (
 	ScopeKindInstances ScopeKind = "instances"
 	ScopeKindGroups    ScopeKind = "groups"
+	// ScopeKindAll matches every profile. IDs is ignored. Covers profiles that
+	// are created AFTER the extension was added — i.e. future-proof "all".
+	ScopeKindAll ScopeKind = "all"
 )
 
 type Scope struct {
@@ -58,22 +61,21 @@ type Extension struct {
 }
 
 type ExtensionView struct {
-	ExtensionID              string        `json:"extensionId"`
-	ChromeID                 string        `json:"chromeId"`
-	Name                     string        `json:"name"`
-	Provider                 string        `json:"provider"`
-	Description              string        `json:"description"`
-	Version                  string        `json:"version"`
-	SourceType               SourceType    `json:"sourceType"`
-	StoreVendor              StoreVendor   `json:"storeVendor"`
-	SourceURL                string        `json:"sourceUrl"`
-	Enabled                  bool          `json:"enabled"`
-	Scope                    Scope         `json:"scope"`
-	IconDataURL              string        `json:"iconDataURL"`
-	PendingRestartProfileIDs []string      `json:"pendingRestartProfileIds"`
-	StaleScopeIDs            []string      `json:"staleScopeIds"`
-	InstallStatus            InstallStatus `json:"installStatus"`
-	InstallError             string        `json:"installError"`
+	ExtensionID   string        `json:"extensionId"`
+	ChromeID      string        `json:"chromeId"`
+	Name          string        `json:"name"`
+	Provider      string        `json:"provider"`
+	Description   string        `json:"description"`
+	Version       string        `json:"version"`
+	SourceType    SourceType    `json:"sourceType"`
+	StoreVendor   StoreVendor   `json:"storeVendor"`
+	SourceURL     string        `json:"sourceUrl"`
+	Enabled       bool          `json:"enabled"`
+	Scope         Scope         `json:"scope"`
+	IconDataURL   string        `json:"iconDataURL"`
+	StaleScopeIDs []string      `json:"staleScopeIds"`
+	InstallStatus InstallStatus `json:"installStatus"`
+	InstallError  string        `json:"installError"`
 }
 
 // Metadata is the identify-result shape. It carries everything the frontend
@@ -92,11 +94,3 @@ type Metadata struct {
 	DuplicateOf string      `json:"duplicateOf"`
 }
 
-type ExtensionChangeResult struct {
-	Extension            *ExtensionView `json:"extension"`
-	AffectedProfileIDs   []string       `json:"affectedProfileIds"`
-	CDPSucceededIDs      []string       `json:"cdpSucceededIds"`
-	PendingRestartIDs    []string       `json:"pendingRestartIds"`
-	NotRunningIDs        []string       `json:"notRunningIds"`
-	CDPSupportedByKernel bool           `json:"cdpSupportedByKernel"`
-}

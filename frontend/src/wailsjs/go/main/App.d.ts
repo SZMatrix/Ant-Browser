@@ -120,11 +120,9 @@ export function DeleteGroup(arg1:string):Promise<void>;
 
 export function ExtensionCreateInstalling(arg1:extension.Metadata,arg2:extension.Scope,arg3:string):Promise<extension.ExtensionView>;
 
-export function ExtensionDelete(arg1:string):Promise<extension.ExtensionChangeResult>;
+export function ExtensionDelete(arg1:string):Promise<extension.ExtensionView>;
 
 export function ExtensionGet(arg1:string):Promise<extension.ExtensionView>;
-
-export function ExtensionGetPendingRestarts():Promise<Record<string, Array<string>>>;
 
 export function ExtensionIdentifyFromLocal(arg1:string):Promise<extension.Metadata>;
 
@@ -136,9 +134,9 @@ export function ExtensionRename(arg1:string,arg2:string):Promise<void>;
 
 export function ExtensionRetryInstall(arg1:string):Promise<void>;
 
-export function ExtensionSetEnabled(arg1:string,arg2:boolean):Promise<extension.ExtensionChangeResult>;
+export function ExtensionSetEnabled(arg1:string,arg2:boolean):Promise<extension.ExtensionView>;
 
-export function ExtensionUpdateScope(arg1:string,arg2:extension.Scope):Promise<extension.ExtensionChangeResult>;
+export function ExtensionUpdateScope(arg1:string,arg2:extension.Scope):Promise<extension.ExtensionView>;
 
 export function FetchRemoteAuthorProfile(arg1:string,arg2:number):Promise<Record<string, any>>;
 

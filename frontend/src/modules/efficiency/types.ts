@@ -1,4 +1,4 @@
-export type ScopeKind = 'instances' | 'groups'
+export type ScopeKind = 'instances' | 'groups' | 'all'
 
 export interface ExtensionScope {
   kind: ScopeKind
@@ -23,7 +23,6 @@ export interface ExtensionView {
   enabled: boolean
   scope: ExtensionScope
   iconDataURL: string
-  pendingRestartProfileIds: string[]
   staleScopeIds: string[]
   installStatus: InstallStatus
   installError: string
@@ -40,13 +39,4 @@ export interface ExtensionMetadata {
   storeVendor: StoreVendor
   sourceUrl: string
   duplicateOf: string
-}
-
-export interface ExtensionChangeResult {
-  extension: ExtensionView | null
-  affectedProfileIds: string[]
-  cdpSucceededIds: string[]
-  pendingRestartIds: string[]
-  notRunningIds: string[]
-  cdpSupportedByKernel: boolean
 }

@@ -16,7 +16,7 @@ func TestBuildViewIncludesIconDataURL(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(p.ExtensionDir("ext-1"), "icon.png"), iconBytes, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m := NewManager(nil, nil, NewPendingRestartTracker(), p)
+	m := NewManager(nil, nil, p)
 	ext := &Extension{ExtensionID: "ext-1", Name: "N", IconPath: "icon.png", Enabled: true}
 	view := m.BuildView(ext, nil, nil)
 	want := "data:image/png;base64," + base64.StdEncoding.EncodeToString(iconBytes)
@@ -28,7 +28,7 @@ func TestBuildViewIncludesIconDataURL(t *testing.T) {
 func TestBuildViewEmptyIconWhenMissing(t *testing.T) {
 	dir := t.TempDir()
 	p := NewPaths(dir)
-	m := NewManager(nil, nil, NewPendingRestartTracker(), p)
+	m := NewManager(nil, nil, p)
 	ext := &Extension{ExtensionID: "ext-2", Name: "N", IconPath: "icon.png", Enabled: true}
 	view := m.BuildView(ext, nil, nil)
 	if view.IconDataURL != "" {
@@ -55,14 +55,3 @@ func TestStaleIDsDetectsMissingGroupsAndProfiles(t *testing.T) {
 	}
 }
 
-func TestBuildViewPopulatesPendingRestarts(t *testing.T) {
-	p := NewPaths(t.TempDir())
-	tracker := NewPendingRestartTracker()
-	tracker.Mark("ext-1", "p1")
-	tracker.Mark("ext-1", "p2")
-	m := NewManager(nil, nil, tracker, p)
-	view := m.BuildView(&Extension{ExtensionID: "ext-1"}, nil, nil)
-	if len(view.PendingRestartProfileIDs) != 2 {
-		t.Fatalf("pending: %+v", view.PendingRestartProfileIDs)
-	}
-}

@@ -61,7 +61,7 @@ func TestResolveExtensionsForProfileAppendsLoadExtension(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	app.extMgr = extension.NewManager(store, extension.NewInstaller(paths), extension.NewPendingRestartTracker(), paths)
+	app.extMgr = extension.NewManager(store, extension.NewInstaller(paths), paths)
 
 	profileOK := &browser.Profile{ProfileId: "p-ok"}
 	profileNope := &browser.Profile{ProfileId: "p-other"}
@@ -98,7 +98,7 @@ func TestResolveExtensionsForProfileSkipsMissingDir(t *testing.T) {
 		Enabled:     true,
 		Scope:       extension.Scope{Kind: extension.ScopeKindInstances, IDs: []string{"p"}},
 	})
-	app.extMgr = extension.NewManager(store, extension.NewInstaller(paths), extension.NewPendingRestartTracker(), paths)
+	app.extMgr = extension.NewManager(store, extension.NewInstaller(paths), paths)
 
 	got := app.resolveExtensionsForProfile(&browser.Profile{ProfileId: "p"})
 	if len(got) != 0 {
@@ -134,7 +134,6 @@ func newTestAppWithExtensions(t *testing.T) (*App, func()) {
 	app.extMgr = extension.NewManager(
 		extension.NewSQLiteStore(db.GetConn()),
 		extension.NewInstaller(paths),
-		extension.NewPendingRestartTracker(),
 		paths,
 	)
 	return app, func() { _ = db.Close() }

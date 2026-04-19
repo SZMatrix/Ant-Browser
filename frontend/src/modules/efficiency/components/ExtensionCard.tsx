@@ -1,4 +1,4 @@
-import { AlertCircle, Loader2, Settings, Trash2 } from 'lucide-react'
+import { AlertCircle, Loader2, Pencil, Trash2 } from 'lucide-react'
 import type { ExtensionView } from '../types'
 import { Switch } from '../../../shared/components'
 import { retryInstall } from '../api'
@@ -6,27 +6,30 @@ import placeholder from '../../../resources/images/extension-placeholder.svg'
 
 interface Props {
   data: ExtensionView
-  cdpSupported?: boolean
   profileNames?: Record<string, string>
   groupNames?: Record<string, string>
   onToggle: (id: string, enabled: boolean) => void
-  onDelete: (id: string) => void
+  onDelete: (ext: ExtensionView) => void
+  onEdit: (ext: ExtensionView) => void
   onChanged: () => void
 }
 
-export function ExtensionCard({ data, cdpSupported, profileNames, groupNames, onToggle, onDelete, onChanged }: Props) {
+export function ExtensionCard({ data, profileNames, groupNames, onToggle, onDelete, onEdit, onChanged }: Props) {
   const status = data.installStatus || 'succeeded'
   const isInstalling = status === 'installing'
   const isFailed = status === 'failed'
 
-  const scopeLabel = data.scope.kind === 'groups' ? '分组' : '实例'
-  const nameMap = data.scope.kind === 'groups' ? groupNames : profileNames
-  const resolvedNames = data.scope.ids.map((id) => nameMap?.[id] ?? id)
-  const scopeSummary = resolvedNames.length === 0
-    ? `${scopeLabel}：未指定`
-    : `${scopeLabel}：${resolvedNames.join('、')}`
-
-  const pendingCount = data.pendingRestartProfileIds.length
+  let scopeSummary: string
+  if (data.scope.kind === 'all') {
+    scopeSummary = '全部：所有实例（含后续新增）'
+  } else {
+    const scopeLabel = data.scope.kind === 'groups' ? '分组' : '实例'
+    const nameMap = data.scope.kind === 'groups' ? groupNames : profileNames
+    const resolvedNames = data.scope.ids.map((id) => nameMap?.[id] ?? id)
+    scopeSummary = resolvedNames.length === 0
+      ? `${scopeLabel}：未指定`
+      : `${scopeLabel}：${resolvedNames.join('、')}`
+  }
 
   const handleRetry = async () => {
     try {
@@ -72,16 +75,9 @@ export function ExtensionCard({ data, cdpSupported, profileNames, groupNames, on
             </div>
             <div className="flex items-center gap-1">
               <button
-                title="编辑"
-                disabled={isInstalling || isFailed}
-                className="p-1 rounded hover:bg-[var(--color-bg-muted)] disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Settings className="w-4 h-4 text-[var(--color-text-muted)]" />
-              </button>
-              <button
                 title="删除"
                 disabled={isInstalling}
-                onClick={() => !isInstalling && onDelete(data.extensionId)}
+                onClick={() => !isInstalling && onDelete(data)}
                 className="p-1 rounded hover:bg-[var(--color-bg-muted)] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Trash2 className="w-4 h-4 text-[var(--color-text-muted)]" />
@@ -106,22 +102,23 @@ export function ExtensionCard({ data, cdpSupported, profileNames, groupNames, on
         {data.description || '（无描述）'}
       </p>
 
-      <div className="border-t border-[var(--color-border-muted)] pt-3 text-xs">
+      <div className="border-t border-[var(--color-border-muted)] pt-3 text-xs flex items-center gap-2">
         <span
-          className="block text-[var(--color-text-muted)] truncate"
+          className="flex-1 min-w-0 text-[var(--color-text-muted)] truncate"
           title={scopeSummary}
         >
           范围：{scopeSummary}
         </span>
+        <button
+          title="编辑"
+          disabled={isInstalling || isFailed}
+          onClick={() => onEdit(data)}
+          className="p-1 rounded hover:bg-[var(--color-bg-muted)] disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+        >
+          <Pencil className="w-4 h-4 text-[var(--color-text-muted)]" />
+        </button>
       </div>
 
-      {pendingCount > 0 && !isInstalling && !isFailed && (
-        <div className="text-xs text-amber-600" title={data.pendingRestartProfileIds.join(', ')}>
-          {cdpSupported === false
-            ? `当前内核不支持实时生效，请重启这 ${pendingCount} 个实例`
-            : `🔄 ${pendingCount} 个实例注入失败，请重启生效`}
-        </div>
-      )}
       {data.staleScopeIds.length > 0 && !isInstalling && !isFailed && (
         <div className="text-xs text-rose-500" title={data.staleScopeIds.join(', ')}>
           ⚠ {data.staleScopeIds.length} 个范围 ID 已失效

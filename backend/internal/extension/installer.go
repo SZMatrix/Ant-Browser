@@ -61,6 +61,48 @@ func (in *Installer) CreatePlaceholder(store *SQLiteStore, meta Metadata, scope 
 	return ext, nil
 }
 
+// PromoteToReinstall flips an existing row back to 'installing' with refreshed
+// metadata + scope + name so the add-flow can overwrite a duplicate extension
+// instead of creating a second row. The worker's runInstall removes the target
+// extension dir before extracting, so the on-disk payload is replaced too.
+//
+// Fails if the row is already installing — the caller should rely on the
+// duplicate check to avoid racing two concurrent installs on the same id.
+func (in *Installer) PromoteToReinstall(store *SQLiteStore, id string, meta Metadata, scope Scope, overrideName string) (*Extension, error) {
+	ext, err := store.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if ext.InstallStatus == InstallStatusInstalling {
+		return nil, fmt.Errorf("extension is currently installing")
+	}
+	name := strings.TrimSpace(overrideName)
+	if name == "" {
+		name = meta.Name
+	}
+	if name == "" {
+		name = ext.Name
+	}
+	ext.Name = name
+	if meta.ChromeID != "" {
+		ext.ChromeID = meta.ChromeID
+	}
+	ext.Provider = meta.Provider
+	ext.Description = meta.Description
+	ext.Version = meta.Version
+	ext.SourceType = meta.SourceType
+	ext.StoreVendor = meta.StoreVendor
+	ext.SourceURL = meta.SourceURL
+	ext.Scope = scope
+	ext.InstallStatus = InstallStatusInstalling
+	ext.InstallError = ""
+	// IconPath / UnpackedPath are rewritten by the worker after it re-extracts.
+	if err := store.Update(ext); err != nil {
+		return nil, fmt.Errorf("update for reinstall: %w", err)
+	}
+	return ext, nil
+}
+
 // RecoverOnBoot cleans up leftover *.old backup directories from the pre-async
 // overwrite flow (safe to keep: existing installs may still have them on disk)
 // and purges the _staging root which the new worker treats as scratch-only.

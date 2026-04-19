@@ -1,13 +1,15 @@
 package extension
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 type KernelCapability struct {
@@ -106,11 +108,7 @@ func (c *CDPClient) LoadUnpacked(unpackedPath string) (bool, string) {
 	if !c.Capability().SupportsLoadUnpacked {
 		return false, "unsupported"
 	}
-	payload := map[string]any{
-		"method": "Extensions.loadUnpacked",
-		"params": map[string]any{"path": unpackedPath},
-	}
-	return c.invokeHTTP(payload)
+	return c.invokeBrowserCommand("Extensions.loadUnpacked", map[string]any{"path": unpackedPath})
 }
 
 // Unload attempts Extensions.unload by chrome_id.
@@ -118,52 +116,80 @@ func (c *CDPClient) Unload(chromeExtID string) (bool, string) {
 	if !c.Capability().SupportsUnload {
 		return false, "unsupported"
 	}
-	payload := map[string]any{
-		"method": "Extensions.unload",
-		"params": map[string]any{"id": chromeExtID},
-	}
-	return c.invokeHTTP(payload)
+	return c.invokeBrowserCommand("Extensions.unload", map[string]any{"id": chromeExtID})
 }
 
-// invokeHTTP is a conservative starter transport. The DevTools spec requires
-// WebSocket (ws://127.0.0.1:<port>/devtools/browser/<browserId>) for command
-// execution; the HTTP POST path does not exist on stock Chromium. Treat this
-// implementation as a known-limited shim that will usually return an error
-// and therefore mark affected profiles as "pending restart" — which matches
-// the spec's documented fallback semantics for kernels without runtime support.
-// Upgrade to a real WS dial (e.g. github.com/gorilla/websocket) when a fork
-// that honors Extensions.loadUnpacked is available to test against.
-func (c *CDPClient) invokeHTTP(payload map[string]any) (bool, string) {
-	body, err := json.Marshal(payload)
+var cdpCmdIDSeq int64
+
+// invokeBrowserCommand dials the browser-level DevTools WebSocket
+// (webSocketDebuggerUrl from /json/version), sends one command, and waits for
+// the matching response. One connection per call keeps state trivial; 3 s
+// bounds all IO so a wedged kernel can't stall the caller.
+func (c *CDPClient) invokeBrowserCommand(method string, params map[string]any) (bool, string) {
+	wsURL, err := c.fetchBrowserWSURL(3 * time.Second)
 	if err != nil {
 		return false, err.Error()
 	}
-	url := fmt.Sprintf("http://127.0.0.1:%d/json/protocol/command", c.DebugPort)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	dialer := &websocket.Dialer{HandshakeTimeout: 3 * time.Second}
+	conn, _, err := dialer.Dial(wsURL, nil)
 	if err != nil {
 		return false, err.Error()
 	}
-	req.Header.Set("Content-Type", "application/json")
-	cl := &http.Client{Timeout: 3 * time.Second}
-	resp, err := cl.Do(req)
-	if err != nil {
+	defer conn.Close()
+
+	id := atomic.AddInt64(&cdpCmdIDSeq, 1)
+	_ = conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+	if err := conn.WriteJSON(map[string]any{"id": id, "method": method, "params": params}); err != nil {
 		return false, err.Error()
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = conn.SetReadDeadline(deadline)
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			return false, err.Error()
+		}
+		var resp struct {
+			ID    int64 `json:"id"`
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(raw, &resp); err != nil {
+			// Ignore unparseable / event frames.
+			continue
+		}
+		if resp.ID != id {
+			continue
+		}
+		if resp.Error != nil {
+			return false, resp.Error.Message
+		}
+		return true, ""
+	}
+	return false, "timeout"
+}
+
+func (c *CDPClient) fetchBrowserWSURL(timeout time.Duration) (string, error) {
+	cl := &http.Client{Timeout: timeout}
+	resp, err := cl.Get(fmt.Sprintf("http://127.0.0.1:%d/json/version", c.DebugPort))
+	if err != nil {
+		return "", err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return false, fmt.Sprintf("HTTP %d", resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
 	}
-	raw, _ := io.ReadAll(resp.Body)
-	var result struct {
-		Error *struct {
-			Message string `json:"message"`
-		} `json:"error"`
+	var v struct {
+		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
 	}
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return false, err.Error()
+	if err := json.Unmarshal(body, &v); err != nil {
+		return "", err
 	}
-	if result.Error != nil {
-		return false, result.Error.Message
+	if v.WebSocketDebuggerURL == "" {
+		return "", fmt.Errorf("/json/version missing webSocketDebuggerUrl")
 	}
-	return true, ""
+	return v.WebSocketDebuggerURL, nil
 }

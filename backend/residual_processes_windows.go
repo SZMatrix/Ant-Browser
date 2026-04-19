@@ -74,7 +74,7 @@ exit 0
 	}
 	defer os.Remove(scriptPath)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	powershellPath := `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`

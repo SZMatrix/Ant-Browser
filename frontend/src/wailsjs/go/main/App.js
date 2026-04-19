@@ -234,10 +234,6 @@ export function ExtensionGet(arg1) {
   return window['go']['main']['App']['ExtensionGet'](arg1);
 }
 
-export function ExtensionGetPendingRestarts() {
-  return window['go']['main']['App']['ExtensionGetPendingRestarts']();
-}
-
 export function ExtensionIdentifyFromLocal(arg1) {
   return window['go']['main']['App']['ExtensionIdentifyFromLocal'](arg1);
 }

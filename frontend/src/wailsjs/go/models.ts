@@ -631,7 +631,6 @@ export namespace extension {
 	    enabled: boolean;
 	    scope: Scope;
 	    iconDataURL: string;
-	    pendingRestartProfileIds: string[];
 	    staleScopeIds: string[];
 	    installStatus: string;
 	    installError: string;
@@ -654,7 +653,6 @@ export namespace extension {
 	        this.enabled = source["enabled"];
 	        this.scope = this.convertValues(source["scope"], Scope);
 	        this.iconDataURL = source["iconDataURL"];
-	        this.pendingRestartProfileIds = source["pendingRestartProfileIds"];
 	        this.staleScopeIds = source["staleScopeIds"];
 	        this.installStatus = source["installStatus"];
 	        this.installError = source["installError"];
@@ -678,47 +676,6 @@ export namespace extension {
 		    return a;
 		}
 	}
-	export class ExtensionChangeResult {
-	    extension?: ExtensionView;
-	    affectedProfileIds: string[];
-	    cdpSucceededIds: string[];
-	    pendingRestartIds: string[];
-	    notRunningIds: string[];
-	    cdpSupportedByKernel: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new ExtensionChangeResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.extension = this.convertValues(source["extension"], ExtensionView);
-	        this.affectedProfileIds = source["affectedProfileIds"];
-	        this.cdpSucceededIds = source["cdpSucceededIds"];
-	        this.pendingRestartIds = source["pendingRestartIds"];
-	        this.notRunningIds = source["notRunningIds"];
-	        this.cdpSupportedByKernel = source["cdpSupportedByKernel"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	
 	export class Metadata {
 	    chromeId: string;
 	    name: string;
